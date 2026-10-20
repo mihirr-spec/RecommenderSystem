@@ -17,7 +17,7 @@ from recsys.engine import Recommender
 STATIC = Path(__file__).parent / "static"
 
 if not (ARTIFACTS_DIR / "cf.npz").exists():
-    raise SystemExit("No trained model in artifacts/. Run `pip install -r requirements-dev.txt` then `python -m recsys.train`.")
+    raise SystemExit("No trained model found. Run `python -m recsys.train` first.")
 
 rec = Recommender()
 app = FastAPI(title="Folio Book Recommender", version="1.0")

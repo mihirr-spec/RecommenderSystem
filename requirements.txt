@@ -1,6 +1,10 @@
-# Runtime: enough to run the web app with the trained model in artifacts/
-fastapi>=0.110
-uvicorn[standard]>=0.29
 pandas>=2.0
 numpy>=1.26
 scipy>=1.11
+scikit-learn>=1.3
+scikit-surprise>=1.1.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+matplotlib>=3.8
+seaborn>=0.13
+ipykernel

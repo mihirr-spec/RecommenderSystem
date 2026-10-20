@@ -1,8 +1,0 @@
-* text=auto
-*.sh text eol=lf
-*.bat text eol=crlf
-*.png binary
-*.npz binary
-*.pkl binary
-# keep GitHub's language bar about the code, not the report notebook
-notebooks/*.ipynb linguist-documentation

@@ -10,8 +10,7 @@ if not exist .venv\Scripts\python.exe (
 )
 
 if not exist artifacts\cf.npz (
-    echo No trained model found - installing training dependencies and training, about 5 minutes...
-    .venv\Scripts\python.exe -m pip install -r requirements-dev.txt || goto :error
+    echo Training the recommender - this takes about 5 minutes the first time...
     .venv\Scripts\python.exe -m recsys.train || goto :error
 )
 
