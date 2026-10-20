@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Folio — Book Recommender</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23b4532a'/><text x='16' y='23' font-family='Georgia' font-size='20' text-anchor='middle' fill='white'>F</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="#discover" class="brand">
+        <span class="brand-mark">F</span>
+        <span class="brand-name">Folio</span>
+      </a>
+      <nav class="tabs" id="tabs">
+        <a href="#discover" data-view="discover">Discover</a>
+        <a href="#foryou" data-view="foryou">For You</a>
+        <a href="#new" data-view="new">New Reader</a>
+        <a href="#insights" data-view="insights">Model Insights</a>
+      </nav>
+      <div class="search" id="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search-input" type="search" placeholder="Search titles or authors…" autocomplete="off">
+        <div class="search-results" id="search-results" hidden></div>
+      </div>
+      <button class="icon-btn" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- DISCOVER -->
+    <section class="view" id="view-discover">
+      <div class="hero">
+        <p class="eyebrow">A hybrid recommender system</p>
+        <h1>Find the book you'll<br><em>love next.</em></h1>
+        <p class="lede">Built from <strong id="hero-ratings">~1M</strong> ratings by <strong id="hero-users">53k</strong> readers on <strong id="hero-books">10k</strong> books. It blends co-reading patterns, Goodreads tags and an SVD star-rating model.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#new">Start as a new reader</a>
+          <a class="btn ghost" href="#foryou">Try an existing reader</a>
+        </div>
+      </div>
+
+      <div class="section-head">
+        <h2 id="discover-title">Most popular</h2>
+        <div class="seg" id="sort-seg">
+          <button data-sort="popular" class="on">Popular</button>
+          <button data-sort="top_rated">Top rated</button>
+        </div>
+      </div>
+      <div class="chips" id="genre-chips"></div>
+      <div class="grid" id="discover-grid"></div>
+      <div class="center"><button class="btn ghost" id="discover-more">Load more</button></div>
+    </section>
+
+    <!-- FOR YOU (existing users) -->
+    <section class="view" id="view-foryou" hidden>
+      <div class="page-head">
+        <p class="eyebrow">Personalised recommendations</p>
+        <h1>Pick a reader from the dataset</h1>
+        <p class="lede">Each of these is a real (anonymised) Goodreads user. Their recommendations come from their own ratings and to-read shelf.</p>
+      </div>
+      <div class="user-picker">
+        <div class="user-list" id="user-list"></div>
+        <form class="user-form" id="user-form">
+          <label for="user-id">or enter a user ID</label>
+          <div class="inline">
+            <input id="user-id" type="number" min="1" placeholder="e.g. 314">
+            <button class="btn primary" type="submit">Load</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="user-panel" hidden>
+        <div class="profile card">
+          <div class="profile-main">
+            <div class="avatar" id="p-avatar"></div>
+            <div>
+              <h2 id="p-name">Reader</h2>
+              <p class="muted" id="p-meta"></p>
+              <div class="tag-row" id="p-tags"></div>
+            </div>
+          </div>
+          <div class="profile-hist" id="p-hist"></div>
+        </div>
+
+        <h3 class="row-title">Their favourites</h3>
+        <div class="shelf" id="p-favs"></div>
+
+        <div class="controls card" id="foryou-controls"></div>
+        <div class="section-head"><h2>Recommended for this reader</h2><span class="muted small" id="foryou-note"></span></div>
+        <div class="grid" id="foryou-grid"></div>
+      </div>
+    </section>
+
+    <!-- NEW READER (cold start) -->
+    <section class="view" id="view-new" hidden>
+      <div class="page-head">
+        <p class="eyebrow">Cold start</p>
+        <h1>Tell us what you like</h1>
+        <p class="lede">Choose a few genres and rate books you have read. Recommendations update with every rating. Co-reading and tag profiles work from your first rating, and the SVD model folds you into its latent space without retraining.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step card">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>Favourite genres</h3>
+            <div class="chips" id="new-genres"></div>
+          </div>
+        </div>
+        <div class="step card">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-head">
+              <h3>Rate books you've read <span class="pill" id="rated-count">0 rated</span></h3>
+              <button class="link" id="clear-ratings">Clear all</button>
+            </div>
+            <div class="confidence"><span>Star-rating model confidence</span><div class="bar"><i id="conf-bar"></i></div><b id="conf-val">0%</b></div>
+            <div class="rate-search">
+              <input id="rate-search" type="search" placeholder="Search a book you've read…" autocomplete="off">
+            </div>
+            <div class="rate-grid" id="rate-grid"></div>
+            <div class="center"><button class="btn ghost small" id="rate-more">Show other books</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls card" id="new-controls"></div>
+      <div class="section-head"><h2>Your recommendations</h2><span class="muted small" id="new-note"></span></div>
+      <div class="grid" id="new-grid"></div>
+    </section>
+
+    <!-- INSIGHTS -->
+    <section class="view" id="view-insights" hidden>
+      <div class="page-head">
+        <p class="eyebrow">Under the hood</p>
+        <h1>How the model performs</h1>
+        <p class="lede">All numbers are measured on held-out data: 20% of each user's ratings were hidden during training.</p>
+      </div>
+      <div id="insights-body"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Folio · Goodbooks-10k · item-kNN + TF-IDF content + SVD hybrid</span>
+    <a href="/docs" target="_blank">API docs</a>
+  </footer>
+
+  <!-- Book modal -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="icon-btn modal-close" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

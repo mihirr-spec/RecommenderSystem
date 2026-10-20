@@ -1,0 +1,6 @@
+# Runtime: enough to run the web app with the trained model in artifacts/
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pandas>=2.0
+numpy>=1.26
+scipy>=1.11
