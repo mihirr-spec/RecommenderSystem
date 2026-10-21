@@ -6,11 +6,12 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import accounts
 from recsys.config import ARTIFACTS_DIR, GENRES
 from recsys.engine import Recommender
 
@@ -20,6 +21,7 @@ if not (ARTIFACTS_DIR / "cf.npz").exists():
     raise SystemExit("No trained model found. Run `python -m recsys.train` first.")
 
 rec = Recommender()
+accounts.init_db()
 app = FastAPI(title="Folio Book Recommender", version="1.0")
 
 Alpha = Query(None, ge=0, le=1, description="0 = content-based, 1 = collaborative item-kNN")
@@ -121,6 +123,117 @@ def recommend_new(body: NewReader):
     check_genre(body.genre)
     return rec.recommend_new(
         body.ratings, body.genres, body.n, body.alpha, body.pop_weight, body.genre, body.svd_weight
+    )
+
+
+# ------------------------------------------------------------ accounts
+class SignUp(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(..., min_length=6, max_length=128)
+
+
+class LogIn(BaseModel):
+    email: str
+    password: str
+
+
+class Genres(BaseModel):
+    genres: List[str]
+
+
+class Rating(BaseModel):
+    rating: float = Field(..., ge=0, le=5)
+
+
+def current_user(authorization: Optional[str] = Header(None)):
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    user = accounts.user_for_token(token) if token else None
+    if not user:
+        raise HTTPException(401, "Please log in")
+    return user
+
+
+@app.get("/api/auth/demo-accounts")
+def demo_accounts():
+    return [{**d, **rec.user_summary(d["dataset_user_id"])} for d in accounts.DEMO_ACCOUNTS]
+
+
+@app.post("/api/auth/signup")
+def sign_up(body: SignUp):
+    try:
+        token, user = accounts.sign_up(body.name, body.email, body.password)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/login")
+def log_in(body: LogIn):
+    result = accounts.log_in(body.email, body.password)
+    if not result:
+        raise HTTPException(401, "Wrong email or password")
+    token, user = result
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/demo/{key}")
+def log_in_demo(key: str):
+    result = accounts.log_in_demo(key)
+    if not result:
+        raise HTTPException(404, "Unknown demo account")
+    token, user = result
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/logout")
+def log_out(authorization: Optional[str] = Header(None)):
+    accounts.log_out((authorization or "").removeprefix("Bearer ").strip())
+    return {"ok": True}
+
+
+@app.get("/api/me")
+def me(user=Depends(current_user)):
+    if user["is_demo"]:
+        profile = rec.user_profile(user["dataset_user_id"])
+    else:
+        profile = rec.new_profile(accounts.get_ratings(user["id"]))
+    return {**user, "profile": profile}
+
+
+@app.put("/api/me/genres")
+def set_genres(body: Genres, user=Depends(current_user)):
+    for g in body.genres:
+        check_genre(g)
+    accounts.set_genres(user["id"], body.genres)
+    return {"genres": body.genres}
+
+
+@app.put("/api/me/ratings/{book_id}")
+def set_rating(book_id: int, body: Rating, user=Depends(current_user)):
+    check_book(book_id)
+    if user["is_demo"]:
+        raise HTTPException(403, "Demo accounts use their ratings from the dataset. Sign up to rate books.")
+    if body.rating and body.rating < 1:
+        raise HTTPException(400, "Ratings must be between 1 and 5")
+    accounts.set_rating(user["id"], book_id, body.rating)
+    return {"book_id": book_id, "rating": body.rating}
+
+
+@app.get("/api/me/recommendations")
+def my_recommendations(
+    n: int = Query(24, ge=1, le=100),
+    alpha: Optional[float] = Alpha,
+    svd_weight: Optional[float] = SvdWeight,
+    pop_weight: Optional[float] = PopWeight,
+    genre: Optional[str] = None,
+    user=Depends(current_user),
+):
+    check_genre(genre)
+    if user["is_demo"]:
+        return rec.recommend_user(user["dataset_user_id"], n, alpha, pop_weight, genre, svd_weight)
+    return rec.recommend_new(
+        accounts.get_ratings(user["id"]), user["genres"], n, alpha, pop_weight, genre, svd_weight
     )
 
 

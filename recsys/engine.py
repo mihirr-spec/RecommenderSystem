@@ -243,6 +243,28 @@ class Recommender:
             },
         }
 
+    def new_profile(self, rated):
+        """Profile of an app user from their saved {book_id: stars} ratings, in
+        the same shape as `user_profile`."""
+        ids = sorted(rated, key=lambda b: -rated[b])
+        stars = np.array([rated[b] for b in ids], dtype=float)
+        idx = np.array([b - 1 for b in ids], dtype=int)
+        liked = idx[stars >= RELEVANCE_THRESHOLD]
+        genre_counts = pd.Series(
+            [g for i in liked for g in self.catalog.iloc[int(i)]["genres"]], dtype=object
+        ).value_counts()
+        profile = scoring.content_profiles(self.content, self._row(idx, scoring.rating_weights(stars))) if len(idx) else None
+        return {
+            "n_ratings": len(ids),
+            "avg_rating": round(float(stars.mean()), 2) if len(ids) else None,
+            "n_to_read": 0,
+            "top_genres": list(genre_counts.index[:3]),
+            "rated": [self.book(b - 1, user_rating=float(rated[b])) for b in ids],
+            "to_read": [],
+            "taste_tags": self.top_profile_tags(profile, 12),
+            "rating_histogram": {str(k): int((np.round(stars) == k).sum()) for k in range(1, 6) if (np.round(stars) == k).any()},
+        }
+
     def recommend_user(self, uid, n=24, alpha=None, pop_weight=None, genre=None, svd_weight=None):
         r, t, row = self._user_row(uid)
         u = self.cf["user_row"][uid]

@@ -15,3 +15,6 @@ artifacts/server_log.txt
 Thumbs.db
 .vscode/
 .idea/
+
+# Local user accounts database
+folio.db

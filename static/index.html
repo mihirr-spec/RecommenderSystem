@@ -13,16 +13,11 @@
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <a href="#discover" class="brand">
+      <a href="#" class="brand">
         <span class="brand-mark">F</span>
         <span class="brand-name">Folio</span>
       </a>
-      <nav class="tabs" id="tabs">
-        <a href="#discover" data-view="discover">Discover</a>
-        <a href="#foryou" data-view="foryou">For You</a>
-        <a href="#new" data-view="new">New Reader</a>
-        <a href="#insights" data-view="insights">Model Insights</a>
-      </nav>
+      <nav class="tabs" id="tabs"></nav>
       <div class="search" id="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="search-input" type="search" placeholder="Search titles or authors…" autocomplete="off">
@@ -31,22 +26,189 @@
       <button class="icon-btn" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
       </button>
+      <div class="auth-area" id="auth-area"></div>
     </div>
   </header>
 
   <main id="app">
-    <!-- DISCOVER -->
-    <section class="view" id="view-discover">
-      <div class="hero">
-        <p class="eyebrow">A hybrid recommender system</p>
-        <h1>Find the book you'll<br><em>love next.</em></h1>
-        <p class="lede">Built from <strong id="hero-ratings">~1M</strong> ratings by <strong id="hero-users">53k</strong> readers on <strong id="hero-books">10k</strong> books. It blends co-reading patterns, Goodreads tags and an SVD star-rating model.</p>
-        <div class="hero-actions">
-          <a class="btn primary" href="#new">Start as a new reader</a>
-          <a class="btn ghost" href="#foryou">Try an existing reader</a>
+    <!-- LANDING -->
+    <section class="view" id="view-landing" hidden>
+      <div class="landing-hero">
+        <div>
+          <p class="eyebrow">A hybrid book recommender</p>
+          <h1>Find the book you'll<br><em>love next.</em></h1>
+          <p class="lede">Folio learns your taste from a few ratings and picks books for you from a catalogue of 10,000, and it tells you <i>why</i> it picked each one.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="#signup">Get started, it's free</a>
+            <a class="btn ghost" href="#demos" data-scroll="demos">Try a demo account</a>
+          </div>
+          <p class="muted small hero-note">Already have an account? <a href="#login">Log in</a></p>
         </div>
+        <div class="cover-collage" id="cover-collage"></div>
       </div>
 
+      <div class="stat-strip card">
+        <div><b id="st-ratings">979k</b><span>ratings learned from</span></div>
+        <div><b id="st-users">53k</b><span>real Goodreads readers</span></div>
+        <div><b id="st-books">10k</b><span>books in the catalogue</span></div>
+        <div><b id="st-hit">49%</b><span>of readers get a book they loved in their top 10</span></div>
+      </div>
+
+      <section class="land-section">
+        <p class="eyebrow">How it works</p>
+        <h2>Three steps to your next favourite book</h2>
+        <div class="steps-3">
+          <div class="card step-card"><span class="step-num">1</span><h3>Create an account</h3><p>Sign up and pick the genres you enjoy.</p></div>
+          <div class="card step-card"><span class="step-num">2</span><h3>Rate a few books</h3><p>Rate books you have read. Even one rating is enough to start.</p></div>
+          <div class="card step-card"><span class="step-num">3</span><h3>Get your picks</h3><p>Personal recommendations, each with a reason like "Because you liked The Hobbit".</p></div>
+        </div>
+      </section>
+
+      <section class="land-section">
+        <p class="eyebrow">Under the hood</p>
+        <h2>Three models, one recommendation</h2>
+        <div class="features">
+          <div class="card feature"><span class="f-icon">👥</span><h3>Co-reading</h3><p>Item-kNN finds books that the same readers read together: "readers of X also read Y".</p></div>
+          <div class="card feature"><span class="f-icon">🏷️</span><h3>Tags &amp; authors</h3><p>A content model compares Goodreads tags and authors with your taste profile.</p></div>
+          <div class="card feature"><span class="f-icon">⭐</span><h3>Star predictions</h3><p>SVD matrix factorisation predicts how many stars you would give each book.</p></div>
+        </div>
+        <p class="center"><a class="btn ghost" href="#insights">See how well it performs →</a></p>
+      </section>
+
+      <section class="land-section" id="demos">
+        <p class="eyebrow">Demo accounts</p>
+        <h2>Log in as a real reader</h2>
+        <p class="lede">Each demo account is a real (anonymised) reader from the dataset, with their own reading history. One click, no password.</p>
+        <div class="demo-grid" id="landing-demos"></div>
+      </section>
+
+      <section class="cta card">
+        <h2>Ready to find your next book?</h2>
+        <a class="btn primary" href="#signup">Create your free account</a>
+      </section>
+    </section>
+
+    <!-- LOG IN / SIGN UP -->
+    <section class="view" id="view-login" hidden>
+      <div class="auth-wrap">
+        <form class="card auth-card" id="login-form" novalidate>
+          <h1>Welcome back</h1>
+          <p class="muted">Log in to see your recommendations.</p>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+          <p class="form-error" hidden></p>
+          <button class="btn primary block" type="submit">Log in</button>
+          <p class="muted small center">New to Folio? <a href="#signup">Create an account</a></p>
+          <div class="divider"><span>or try a demo account</span></div>
+          <div class="demo-list" id="login-demos"></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="view" id="view-signup" hidden>
+      <div class="auth-wrap">
+        <form class="card auth-card" id="signup-form" novalidate>
+          <h1>Create your account</h1>
+          <p class="muted">It takes a few seconds. Then tell us what you like.</p>
+          <label>Name<input name="name" autocomplete="name" required maxlength="60"></label>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="6" placeholder="At least 6 characters"></label>
+          <p class="form-error" hidden></p>
+          <button class="btn primary block" type="submit">Sign up</button>
+          <p class="muted small center">Already have an account? <a href="#login">Log in</a></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- ONBOARDING (new account) -->
+    <section class="view" id="view-onboarding" hidden>
+      <div class="page-head">
+        <p class="eyebrow">Getting started</p>
+        <h1 id="ob-title">Tell us what you like</h1>
+        <p class="lede">Pick a few genres and rate books you have read. Your recommendations below update with every rating.</p>
+      </div>
+      <div class="steps">
+        <div class="step card">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>Favourite genres</h3>
+            <div class="chips" id="ob-genres"></div>
+          </div>
+        </div>
+        <div class="step card">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h3>Rate books you've read</h3>
+            <div class="rater" id="ob-rater"></div>
+          </div>
+        </div>
+      </div>
+      <div class="section-head"><h2>Your first recommendations</h2><span class="muted small" id="ob-note"></span></div>
+      <div class="grid" id="ob-grid"></div>
+      <div class="center"><a class="btn primary" href="#home">Done, take me to my home page →</a></div>
+    </section>
+
+    <!-- HOME (logged in) -->
+    <section class="view" id="view-home" hidden>
+      <div class="page-head home-head">
+        <div>
+          <p class="eyebrow" id="home-eyebrow">For you</p>
+          <h1 id="home-title">Welcome back</h1>
+        </div>
+      </div>
+      <div class="profile card">
+        <div class="profile-main">
+          <div class="avatar" id="p-avatar"></div>
+          <div>
+            <h2 id="p-name"></h2>
+            <p class="muted" id="p-meta"></p>
+            <div class="tag-row" id="p-tags"></div>
+          </div>
+        </div>
+        <div class="profile-hist" id="p-hist"></div>
+      </div>
+      <div class="notice card" id="home-empty" hidden>
+        <b>Your recommendations get better with every rating.</b>
+        <span>Right now we're showing top books in your genres. Rate a few books you've read to make them personal.</span>
+        <a class="btn primary small" href="#library">Rate books</a>
+      </div>
+      <details class="controls-wrap" id="home-controls-wrap">
+        <summary>Tune your recommendations</summary>
+        <div class="controls card" id="home-controls"></div>
+      </details>
+      <div class="section-head"><h2>Recommended for you</h2><span class="muted small" id="home-note"></span></div>
+      <div class="grid" id="home-grid"></div>
+    </section>
+
+    <!-- MY BOOKS (logged in) -->
+    <section class="view" id="view-library" hidden>
+      <div class="page-head">
+        <p class="eyebrow">My books</p>
+        <h1>Your reading history</h1>
+        <p class="lede" id="lib-lede"></p>
+      </div>
+      <div class="section-head"><h2>Books you rated <span class="pill" id="lib-count">0</span></h2></div>
+      <div class="grid" id="lib-rated"></div>
+      <div id="lib-toread-wrap" hidden>
+        <div class="section-head"><h2>On your to-read shelf</h2></div>
+        <div class="shelf" id="lib-toread"></div>
+      </div>
+      <div id="lib-rate-wrap">
+        <div class="section-head"><h2>Rate more books</h2><span class="muted small">every rating improves your recommendations</span></div>
+        <div class="card rate-card">
+          <h3>Your genres</h3>
+          <div class="chips" id="lib-genres"></div>
+          <div class="rater" id="lib-rater"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DISCOVER -->
+    <section class="view" id="view-discover" hidden>
+      <div class="page-head">
+        <p class="eyebrow">Browse</p>
+        <h1>Discover books</h1>
+      </div>
       <div class="section-head">
         <h2 id="discover-title">Most popular</h2>
         <div class="seg" id="sort-seg">
@@ -57,84 +219,6 @@
       <div class="chips" id="genre-chips"></div>
       <div class="grid" id="discover-grid"></div>
       <div class="center"><button class="btn ghost" id="discover-more">Load more</button></div>
-    </section>
-
-    <!-- FOR YOU (existing users) -->
-    <section class="view" id="view-foryou" hidden>
-      <div class="page-head">
-        <p class="eyebrow">Personalised recommendations</p>
-        <h1>Pick a reader from the dataset</h1>
-        <p class="lede">Each of these is a real (anonymised) Goodreads user. Their recommendations come from their own ratings and to-read shelf.</p>
-      </div>
-      <div class="user-picker">
-        <div class="user-list" id="user-list"></div>
-        <form class="user-form" id="user-form">
-          <label for="user-id">or enter a user ID</label>
-          <div class="inline">
-            <input id="user-id" type="number" min="1" placeholder="e.g. 314">
-            <button class="btn primary" type="submit">Load</button>
-          </div>
-        </form>
-      </div>
-
-      <div id="user-panel" hidden>
-        <div class="profile card">
-          <div class="profile-main">
-            <div class="avatar" id="p-avatar"></div>
-            <div>
-              <h2 id="p-name">Reader</h2>
-              <p class="muted" id="p-meta"></p>
-              <div class="tag-row" id="p-tags"></div>
-            </div>
-          </div>
-          <div class="profile-hist" id="p-hist"></div>
-        </div>
-
-        <h3 class="row-title">Their favourites</h3>
-        <div class="shelf" id="p-favs"></div>
-
-        <div class="controls card" id="foryou-controls"></div>
-        <div class="section-head"><h2>Recommended for this reader</h2><span class="muted small" id="foryou-note"></span></div>
-        <div class="grid" id="foryou-grid"></div>
-      </div>
-    </section>
-
-    <!-- NEW READER (cold start) -->
-    <section class="view" id="view-new" hidden>
-      <div class="page-head">
-        <p class="eyebrow">Cold start</p>
-        <h1>Tell us what you like</h1>
-        <p class="lede">Choose a few genres and rate books you have read. Recommendations update with every rating. Co-reading and tag profiles work from your first rating, and the SVD model folds you into its latent space without retraining.</p>
-      </div>
-
-      <div class="steps">
-        <div class="step card">
-          <div class="step-num">1</div>
-          <div class="step-body">
-            <h3>Favourite genres</h3>
-            <div class="chips" id="new-genres"></div>
-          </div>
-        </div>
-        <div class="step card">
-          <div class="step-num">2</div>
-          <div class="step-body">
-            <div class="step-head">
-              <h3>Rate books you've read <span class="pill" id="rated-count">0 rated</span></h3>
-              <button class="link" id="clear-ratings">Clear all</button>
-            </div>
-            <div class="confidence"><span>Star-rating model confidence</span><div class="bar"><i id="conf-bar"></i></div><b id="conf-val">0%</b></div>
-            <div class="rate-search">
-              <input id="rate-search" type="search" placeholder="Search a book you've read…" autocomplete="off">
-            </div>
-            <div class="rate-grid" id="rate-grid"></div>
-            <div class="center"><button class="btn ghost small" id="rate-more">Show other books</button></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="controls card" id="new-controls"></div>
-      <div class="section-head"><h2>Your recommendations</h2><span class="muted small" id="new-note"></span></div>
-      <div class="grid" id="new-grid"></div>
     </section>
 
     <!-- INSIGHTS -->
@@ -150,7 +234,7 @@
 
   <footer class="footer">
     <span>Folio · Goodbooks-10k · item-kNN + TF-IDF content + SVD hybrid</span>
-    <a href="/docs" target="_blank">API docs</a>
+    <span><a href="#insights">Model insights</a> · <a href="/docs" target="_blank">API docs</a></span>
   </footer>
 
   <!-- Book modal -->

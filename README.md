@@ -2,13 +2,16 @@
 
 A book recommender system built on the [Goodbooks-10k](https://github.com/zygmuntz/goodbooks-10k) dataset (≈980k ratings, 53k users, 10k books), with a web app to try it out.
 
-![Discover page](docs/screenshots/discover.png)
+![Landing page](docs/screenshots/landing.png)
 
 ## Features
-- **Personalised recommendations** for any user in the dataset, each with a reason ("Because you liked *The Hobbit*")
-- **New reader mode:** pick genres, rate a few books, and get recommendations instantly
-- **Similar books** for any title
-- **Model insights** page showing how the model was evaluated
+- **Accounts:** sign up, log in, and your ratings are saved
+- **Onboarding:** a new user picks genres and rates a few books, and recommendations appear instantly
+- **Demo accounts:** one-click log-in as one of 4 real readers from the dataset
+- **Personalised recommendations**, each with a reason ("Because you liked *The Hobbit*")
+- **My Books:** your rating history, and more books to rate
+- **Discover** popular and top-rated books by genre, and **similar books** for any title
+- **Model Insights** page showing how the model was evaluated
 
 ## How it works
 The app combines three models into one hybrid score:
@@ -30,9 +33,12 @@ python app.py --open
 ```
 The trained model is already in `artifacts/`. To retrain it, run `python -m recsys.train`.
 
+User accounts are stored in `folio.db` (created automatically). Passwords are hashed and never stored in plain text.
+
 ## Project structure
 ```
 ├── app.py              backend (FastAPI)
+├── accounts.py         user accounts: sign-up, log-in, saved ratings (SQLite)
 ├── recsys/             recommender code (data loading, models, training)
 ├── static/             frontend (HTML, CSS, JS)
 ├── artifacts/          trained model files
@@ -46,6 +52,10 @@ The trained model is already in `artifacts/`. To retrain it, run `python -m recs
 ```
 
 ## Screenshots
-| For You | New Reader |
+| Log in | For You |
 |---|---|
-| ![For You](docs/screenshots/for-you.png) | ![New Reader](docs/screenshots/new-reader.png) |
+| ![Log in](docs/screenshots/login.png) | ![For You](docs/screenshots/home.png) |
+
+| My Books |
+|---|
+| ![My Books](docs/screenshots/my-books.png) |

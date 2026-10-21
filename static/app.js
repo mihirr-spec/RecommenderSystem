@@ -11,16 +11,18 @@ const state = {
   meta: null,
   genres: [],
   discover: { genre: null, sort: "popular", offset: 0 },
-  user: null,
-  userControls: null,
-  reader: store.get("folio.reader", { ratings: {}, books: {}, genres: [] }),
-  newControls: null,
-  rateOffset: 0,
+  token: store.get("folio.token", null),
+  me: null,
+  myRatings: {},
+  myBooks: {},
+  view: null,
+  homeControls: null,
+  demos: null,
 };
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}) },
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
@@ -136,15 +138,6 @@ function starInput(value, onRate) {
   return wrap;
 }
 
-function setReaderRating(book, stars) {
-  const r = state.reader;
-  if (stars) { r.ratings[book.id] = stars; r.books[book.id] = book; }
-  else { delete r.ratings[book.id]; delete r.books[book.id]; }
-  store.set("folio.reader", r);
-  updateReaderStatus();
-  refreshNewRecs();
-}
-
 /* ---------------- modal ---------------- */
 async function openBook(id) {
   const modal = $("#modal");
@@ -179,11 +172,13 @@ async function openBook(id) {
       <div class="grid" id="modal-similar"></div>`;
     const mount = () => {
       const s = $("#modal-stars");
+      if (!state.me) { s.innerHTML = `<a class="link" href="#signup">Sign up to rate this book</a>`; return; }
       s.innerHTML = "";
-      s.appendChild(starInput(state.reader.ratings[b.id] || 0, (v) => {
-        setReaderRating(b, v);
-        toast(v ? `Rated ${v}★, added to your New Reader profile` : "Rating removed");
+      s.appendChild(starInput(state.myRatings[b.id] || 0, async (v) => {
+        if (!(await rateBook(b, v))) return;
+        toast(v ? `Rated ${v}★. Your recommendations will update.` : "Rating removed");
         mount();
+        refreshView();
       }));
     };
     mount();
@@ -237,26 +232,208 @@ function setupSearch() {
   document.addEventListener("click", (e) => { if (!e.target.closest("#search")) box.hidden = true; });
 }
 
-/* ---------------- routing ---------------- */
-const views = ["discover", "foryou", "new", "insights"];
+/* ---------------- accounts ---------------- */
+const initial = (name) => (name || "?").trim().charAt(0).toUpperCase();
+const avatarColor = (id) => PALETTES[hash("u" + id) % PALETTES.length][1];
+
+async function loadMe() {
+  state.me = null;
+  state.myRatings = {};
+  state.myBooks = {};
+  if (!state.token) return null;
+  try {
+    state.me = await api("/api/me");
+  } catch {
+    setToken(null);
+    return null;
+  }
+  for (const b of state.me.profile.rated) {
+    state.myRatings[b.id] = b.user_rating;
+    state.myBooks[b.id] = b;
+  }
+  remember(state.me.profile.rated);
+  return state.me;
+}
+
+function setToken(token) {
+  state.token = token;
+  store.set("folio.token", token);
+}
+
+async function afterLogin(res, isNew) {
+  setToken(res.token);
+  await loadMe();
+  renderNav();
+  toast(isNew ? `Welcome to Folio, ${state.me.name}!` : `Welcome back, ${state.me.name}!`);
+  location.hash = isNew ? "onboarding" : "home";
+}
+
+async function loginDemo(key) {
+  try {
+    afterLogin(await api(`/api/auth/demo/${key}`, { method: "POST" }), false);
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function logout() {
+  try { await api("/api/auth/logout", { method: "POST" }); } catch { /* already logged out */ }
+  setToken(null);
+  state.me = null;
+  state.myRatings = {};
+  state.myBooks = {};
+  renderNav();
+  toast("You have been logged out");
+  location.hash = "";
+}
+
+// Saves a rating for the logged-in user. Returns false if they can't rate.
+async function rateBook(b, stars) {
+  if (!state.me) {
+    toast("Create an account to rate books");
+    location.hash = "signup";
+    return false;
+  }
+  if (state.me.is_demo) {
+    toast("Demo accounts use their ratings from the dataset. Sign up to rate books yourself.");
+    return false;
+  }
+  await api(`/api/me/ratings/${b.id}`, { method: "PUT", body: { rating: stars } });
+  if (stars) { state.myRatings[b.id] = stars; state.myBooks[b.id] = b; }
+  else { delete state.myRatings[b.id]; delete state.myBooks[b.id]; }
+  return true;
+}
+
+async function setMyGenres(genres) {
+  await api("/api/me/genres", { method: "PUT", body: { genres } });
+  state.me.genres = genres;
+}
+
+function demoCard(d, compact = false) {
+  return `
+    <button class="demo-card ${compact ? "compact" : ""}" type="button" data-demo="${esc(d.key)}">
+      <span class="avatar" style="background:${avatarColor(d.name)}">${initial(d.name)}</span>
+      <div><b>${esc(d.name)}</b><span>${esc(d.taste)}</span>${compact ? "" : `<small>${d.n_ratings} books rated · Goodreads reader #${d.dataset_user_id}</small>`}</div>
+      <span class="go">Log in →</span>
+    </button>`;
+}
+
+async function demos() {
+  if (!state.demos) state.demos = await api("/api/auth/demo-accounts");
+  return state.demos;
+}
+
+document.addEventListener("click", (e) => {
+  const d = e.target.closest("[data-demo]");
+  if (d) { e.preventDefault(); loginDemo(d.dataset.demo); }
+  const s = e.target.closest("[data-scroll]");
+  if (s) { e.preventDefault(); document.getElementById(s.dataset.scroll).scrollIntoView({ behavior: "smooth" }); }
+});
+
+function setupAuthForms() {
+  const handle = (form, submit) => {
+    const err = $(".form-error", form);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      const data = Object.fromEntries(new FormData(form));
+      const btn = $("button[type=submit]", form);
+      btn.disabled = true;
+      try {
+        await submit(data);
+        form.reset();
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  };
+  handle($("#login-form"), async (d) => {
+    if (!d.email || !d.password) throw new Error("Enter your email and password");
+    await afterLogin(await api("/api/auth/login", { method: "POST", body: d }), false);
+  });
+  handle($("#signup-form"), async (d) => {
+    if (!d.name.trim()) throw new Error("Enter your name");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) throw new Error("Enter a valid email address");
+    if (d.password.length < 6) throw new Error("Password must be at least 6 characters");
+    await afterLogin(await api("/api/auth/signup", { method: "POST", body: d }), true);
+  });
+}
+
+/* ---------------- navigation ---------------- */
+function renderNav() {
+  const tabs = state.me
+    ? [["home", "For You"], ["discover", "Discover"], ["library", "My Books"], ["insights", "Model Insights"]]
+    : [["landing", "Home"], ["discover", "Discover"], ["insights", "Model Insights"]];
+  $("#tabs").innerHTML = tabs.map(([v, label]) => `<a href="#${v === "landing" ? "" : v}" data-view="${v}">${label}</a>`).join("");
+  $("#auth-area").innerHTML = state.me
+    ? `<span class="user-chip"><span class="avatar sm" style="background:${avatarColor(state.me.name)}">${initial(state.me.name)}</span>
+         <span class="user-name">${esc(state.me.name)}</span>${state.me.is_demo ? `<span class="demo-tag">demo</span>` : ""}</span>
+       <button class="btn ghost small" id="logout">Log out</button>`
+    : `<a class="btn ghost small" href="#login">Log in</a><a class="btn primary small" href="#signup">Sign up</a>`;
+  if (state.me) $("#logout").onclick = logout;
+  markTab();
+}
+
+function markTab() {
+  $$("#tabs a").forEach((a) => a.classList.toggle("on", a.dataset.view === state.view));
+}
+
+const VIEWS = ["landing", "login", "signup", "onboarding", "home", "library", "discover", "insights"];
+const PRIVATE = new Set(["onboarding", "home", "library"]);
 const loaded = {};
 
 function route() {
-  const [view, arg] = (location.hash.slice(1) || "discover").split("/");
+  closeModal();
+  let [view, arg] = location.hash.slice(1).split("/");
   if (view === "book" && +arg) {
-    // Shareable link to a book: show it over the Discover page.
-    history.replaceState(null, "", "#discover");
+    // Shareable link to a book: show it over the home page.
+    history.replaceState(null, "", state.me ? "#home" : "#");
+    route();
     openBook(+arg);
-    return route();
+    return;
   }
-  const v = views.includes(view) ? view : "discover";
-  views.forEach((x) => ($(`#view-${x}`).hidden = x !== v));
-  $$("#tabs a").forEach((a) => a.classList.toggle("on", a.dataset.view === v));
+  if (!VIEWS.includes(view)) view = state.me ? "home" : "landing";
+  if (PRIVATE.has(view) && !state.me) { location.hash = "login"; return; }
+  if (["landing", "login", "signup"].includes(view) && state.me) { location.hash = "home"; return; }
+  state.view = view;
+  VIEWS.forEach((x) => ($(`#view-${x}`).hidden = x !== view));
+  markTab();
   window.scrollTo({ top: 0 });
-  if (!loaded[v]) { loaded[v] = true; ({ discover: initDiscover, foryou: initForYou, new: initNew, insights: initInsights })[v](); }
-  if (v === "foryou" && arg && +arg !== state.user) loadUser(+arg);
+  renderView(view);
 }
 window.addEventListener("hashchange", route);
+
+// Account pages are rebuilt on every visit; public pages are built once.
+function renderView(view) {
+  if (view === "home") return renderHome();
+  if (view === "library") return renderLibrary();
+  if (view === "onboarding") return renderOnboarding();
+  if (view === "login" || view === "signup") return renderAuth(view);
+  if (!loaded[view]) { loaded[view] = true; ({ landing: initLanding, discover: initDiscover, insights: initInsights })[view](); }
+}
+
+/* ---------------- landing ---------------- */
+async function initLanding() {
+  const m = state.meta;
+  const hyb = m.ranking_metrics.find((r) => r.model.startsWith("Hybrid"));
+  $("#st-ratings").textContent = fmt(m.dataset.n_ratings);
+  $("#st-users").textContent = fmt(m.dataset.n_users);
+  $("#st-books").textContent = fmt(m.dataset.n_books);
+  $("#st-hit").textContent = Math.round(hyb[`HitRate@${m.ranking_protocol.k}`] * 100) + "%";
+  const [books, ds] = await Promise.all([api("/api/popular?n=24&sort=top_rated"), demos()]);
+  remember(books);
+  $("#cover-collage").innerHTML = books.filter((b) => b.cover).slice(0, 9)
+    .map((b, i) => `<div class="collage-item c${i}" data-book="${b.id}"><div class="cover">${cover(b)}</div></div>`).join("");
+  $("#landing-demos").innerHTML = ds.map((d) => demoCard(d)).join("");
+}
+
+async function renderAuth(view) {
+  if (view === "login") $("#login-demos").innerHTML = (await demos()).map((d) => demoCard(d, true)).join("");
+  $(`#${view}-form input`).focus();
+}
 
 /* ---------------- discover ---------------- */
 function genreChips(el, selected, onToggle, { multi = false, all = true } = {}) {
@@ -287,10 +464,6 @@ async function loadDiscover(append = false) {
 }
 
 function initDiscover() {
-  const m = state.meta.dataset;
-  $("#hero-ratings").textContent = fmt(m.n_ratings);
-  $("#hero-users").textContent = fmt(m.n_users);
-  $("#hero-books").textContent = fmt(m.n_books);
   genreChips($("#genre-chips"), null, (g) => { state.discover.genre = g; loadDiscover(); });
   $("#sort-seg").onclick = (e) => {
     const b = e.target.closest("button");
@@ -360,161 +533,161 @@ const recQuery = (c, n = 24) => {
   return p;
 };
 
-/* ---------------- for you ---------------- */
-const avatarColor = (id) => PALETTES[hash("u" + id) % PALETTES.length][1];
-
-async function initForYou() {
-  state.userControls = makeControls($("#foryou-controls"), () => loadUserRecs());
-  const users = await api("/api/users/sample");
-  $("#user-list").innerHTML = users.map((u) => `
-    <button class="user-card" data-uid="${u.user_id}">
-      <span class="avatar" style="background:${avatarColor(u.user_id)}">${String(u.user_id).slice(-2)}</span>
-      <div><b>Reader #${u.user_id}</b><span>${u.n_ratings} ratings · ${esc(u.top_genres.slice(0, 2).join(", ") || "Mixed")}</span></div>
-    </button>`).join("");
-  $("#user-list").onclick = (e) => {
-    const c = e.target.closest(".user-card");
-    if (c) location.hash = `foryou/${c.dataset.uid}`;
-  };
-  $("#user-form").onsubmit = (e) => {
-    e.preventDefault();
-    const id = +$("#user-id").value;
-    if (id) location.hash = `foryou/${id}`;
-  };
-  const arg = location.hash.split("/")[1];
-  if (!arg) location.hash = `foryou/${users[0].user_id}`;
-}
-
-async function loadUser(uid) {
-  state.user = uid;
-  $$(".user-card").forEach((c) => c.classList.toggle("on", +c.dataset.uid === uid));
-  $("#user-panel").hidden = false;
-  try {
-    const p = await api(`/api/users/${uid}`);
-    remember([...p.rated, ...p.to_read]);
-    $("#p-avatar").textContent = String(uid).slice(-2);
-    $("#p-avatar").style.background = avatarColor(uid);
-    $("#p-name").textContent = `Reader #${uid}`;
-    $("#p-meta").textContent = `${p.n_ratings} books rated · average ${p.avg_rating}★ · ${p.n_to_read} on to-read shelf${p.top_genres.length ? " · loves " + p.top_genres.join(", ") : ""}`;
-    $("#p-tags").innerHTML = p.taste_tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("");
-    const max = Math.max(...Object.values(p.rating_histogram), 1);
-    $("#p-hist").innerHTML = [1, 2, 3, 4, 5].map((s) => {
-      const v = p.rating_histogram[s] || 0;
-      return `<div class="hbar"><span>${v}</span><i style="height:${(v / max) * 60}px"></i><span>${s}★</span></div>`;
-    }).join("");
-    $("#p-favs").innerHTML = p.rated.slice(0, 16).map((b) => bookCard(b, { userRating: true })).join("");
-    loadUserRecs();
-  } catch (err) {
-    $("#p-name").textContent = "Reader not found";
-    $("#p-meta").textContent = err.message;
-    $("#p-favs").innerHTML = "";
-    $("#foryou-grid").innerHTML = "";
-  }
-}
-
-async function loadUserRecs() {
-  if (!state.user) return;
-  const grid = $("#foryou-grid");
-  skeleton(grid);
-  const t0 = performance.now();
-  const recs = await api(`/api/users/${state.user}/recommendations?${recQuery(state.userControls)}`);
-  renderGrid(grid, recs, { match: true, reason: true, predicted: true, empty: "No recommendations for this filter." });
-  $("#foryou-note").textContent = `scored all 10,000 books in ${Math.round(performance.now() - t0)} ms`;
-}
-
-/* ---------------- new reader ---------------- */
-function updateReaderStatus() {
-  const n = Object.keys(state.reader.ratings).length;
-  $("#rated-count").textContent = `${n} rated`;
-  const conf = Math.round((n / (n + 3)) * 100);
-  $("#conf-bar").style.width = conf + "%";
-  $("#conf-val").textContent = conf + "%";
-}
-
-function rateItem(b) {
+/* ---------------- rating books (onboarding + my books) ---------------- */
+function rateItem(b, onRated) {
   const el = document.createElement("div");
-  const v = state.reader.ratings[b.id] || 0;
+  const v = state.myRatings[b.id] || 0;
   el.className = "rate-item" + (v ? " rated" : "");
   el.innerHTML = `<div class="mini-cover" data-book="${b.id}">${cover(b)}</div><div class="info"><b title="${esc(b.title)}">${esc(b.title)}</b><small>${esc(b.authors)}</small></div>`;
-  $(".info", el).appendChild(starInput(v, (s) => {
-    setReaderRating(b, s);
-    el.replaceWith(rateItem(b));
+  $(".info", el).appendChild(starInput(v, async (s) => {
+    if (await rateBook(b, s)) { el.replaceWith(rateItem(b, onRated)); onRated(); }
   }));
   return el;
 }
 
-async function loadRateGrid() {
-  const grid = $("#rate-grid");
-  const q = $("#rate-search").value.trim();
-  let books;
-  if (q.length > 1) {
-    books = await api(`/api/search?q=${encodeURIComponent(q)}&n=18`);
-  } else {
-    const gs = state.reader.genres;
-    if (gs.length) {
-      const per = Math.ceil(18 / gs.length);
-      const lists = await Promise.all(gs.map((g) => api(`/api/popular?genre=${encodeURIComponent(g)}&n=${per}&offset=${Math.floor(state.rateOffset / gs.length)}`)));
-      const seen = new Set();
-      books = [];
-      for (let i = 0; i < per; i++) for (const l of lists) if (l[i] && !seen.has(l[i].id)) { seen.add(l[i].id); books.push(l[i]); }
-    } else {
-      books = await api(`/api/popular?n=18&offset=${state.rateOffset}`);
-    }
-    const rated = Object.values(state.reader.books).filter((b) => !books.some((x) => x.id === b.id));
-    books = [...rated, ...books];
-  }
-  remember(books);
-  grid.innerHTML = "";
-  books.forEach((b) => grid.appendChild(rateItem(b)));
-  if (!books.length) grid.innerHTML = `<div class="empty">No books found.</div>`;
-}
-
-const refreshNewRecs = debounce(async () => {
-  if (!state.newControls) return;
-  const grid = $("#new-grid");
-  skeleton(grid, 12);
-  const c = state.newControls;
-  const recs = await api("/api/recommend", {
-    method: "POST",
-    body: {
-      ratings: state.reader.ratings,
-      genres: state.reader.genres,
-      n: 24,
-      alpha: c.alpha,
-      svd_weight: c.svd_weight,
-      pop_weight: c.pop_weight,
-      genre: c.genre || null,
-    },
-  });
-  const n = Object.keys(state.reader.ratings).length;
-  renderGrid(grid, recs, { match: n > 0, reason: true, predicted: n > 0, empty: "No books match this filter." });
-  $("#new-note").textContent = n === 0
-    ? (state.reader.genres.length ? "Showing top-rated books in your genres. Rate a few to personalise." : "Pick genres or rate books to personalise.")
-    : `personalised from ${n} rating${n > 1 ? "s" : ""}`;
-}, 350);
-
-function initNew() {
-  genreChips($("#new-genres"), state.reader.genres, (gs) => {
-    state.reader.genres = gs;
-    store.set("folio.reader", state.reader);
-    state.rateOffset = 0;
-    loadRateGrid();
-    refreshNewRecs();
-  }, { multi: true, all: false });
-  state.newControls = makeControls($("#new-controls"), () => refreshNewRecs());
-  $("#rate-search").addEventListener("input", debounce(loadRateGrid, 250));
-  $("#rate-more").onclick = () => { state.rateOffset += 18; loadRateGrid(); };
-  $("#clear-ratings").onclick = () => {
-    state.reader.ratings = {};
-    state.reader.books = {};
-    store.set("folio.reader", state.reader);
-    updateReaderStatus();
-    loadRateGrid();
-    refreshNewRecs();
+// A search box + grid of books to rate. Calls onChange after every rating.
+function mountRater(el, onChange) {
+  el.innerHTML = `
+    <div class="confidence"><span class="pill rated-count"></span><span>Star-rating model confidence</span><div class="bar"><i></i></div><b></b></div>
+    <div class="rate-search"><input type="search" placeholder="Search a book you've read…" autocomplete="off"></div>
+    <div class="rate-grid"></div>
+    <div class="center"><button class="btn ghost small" type="button">Show other books</button></div>`;
+  let offset = 0;
+  const status = () => {
+    const n = Object.keys(state.myRatings).length;
+    const conf = Math.round((n / (n + 3)) * 100);
+    $(".rated-count", el).textContent = `${n} rated`;
+    $(".bar i", el).style.width = conf + "%";
+    $(".confidence b", el).textContent = conf + "%";
   };
-  updateReaderStatus();
-  loadRateGrid();
-  refreshNewRecs();
+  const rated = () => { status(); onChange(); };
+  const load = async () => {
+    const grid = $(".rate-grid", el);
+    const q = $("input", el).value.trim();
+    let books;
+    if (q.length > 1) {
+      books = await api(`/api/search?q=${encodeURIComponent(q)}&n=18`);
+    } else {
+      const gs = state.me.genres;
+      if (gs.length) {
+        const per = Math.ceil(18 / gs.length);
+        const lists = await Promise.all(gs.map((g) => api(`/api/popular?genre=${encodeURIComponent(g)}&n=${per}&offset=${Math.floor(offset / gs.length)}`)));
+        const seen = new Set();
+        books = [];
+        for (let i = 0; i < per; i++) for (const l of lists) if (l[i] && !seen.has(l[i].id)) { seen.add(l[i].id); books.push(l[i]); }
+      } else {
+        books = await api(`/api/popular?n=18&offset=${offset}`);
+      }
+      const mine = Object.values(state.myBooks).filter((b) => !books.some((x) => x.id === b.id));
+      if (offset === 0) books = [...mine, ...books];
+    }
+    remember(books);
+    grid.innerHTML = "";
+    books.forEach((b) => grid.appendChild(rateItem(b, rated)));
+    if (!books.length) grid.innerHTML = `<div class="empty">No books found.</div>`;
+  };
+  $("input", el).addEventListener("input", debounce(load, 250));
+  $(".center button", el).onclick = () => { offset += 18; load(); };
+  status();
+  load();
+  return { reload: () => { offset = 0; load(); }, status };
 }
+
+/* ---------------- onboarding ---------------- */
+async function loadMyRecs(grid, controls, n = 24) {
+  skeleton(grid, Math.min(n, 12));
+  const t0 = performance.now();
+  const recs = await api(`/api/me/recommendations?${recQuery(controls, n)}`);
+  const personal = state.me.is_demo || Object.keys(state.myRatings).length > 0;
+  renderGrid(grid, recs, { match: personal, reason: true, predicted: personal, empty: "No books match this filter." });
+  return Math.round(performance.now() - t0);
+}
+
+function renderOnboarding() {
+  const me = state.me;
+  $("#ob-title").textContent = `Welcome, ${me.name}! Tell us what you like`;
+  const defaults = { ...state.meta.hybrid_default, genre: "" };
+  const refresh = debounce(async () => {
+    await loadMyRecs($("#ob-grid"), defaults, 12);
+    const n = Object.keys(state.myRatings).length;
+    $("#ob-note").textContent = n ? `personalised from ${n} rating${n > 1 ? "s" : ""}`
+      : me.genres.length ? "top books in your genres. Rate a few to personalise." : "pick genres or rate books to personalise";
+  }, 350);
+  const rater = mountRater($("#ob-rater"), refresh);
+  genreChips($("#ob-genres"), me.genres, async (gs) => { await setMyGenres(gs); rater.reload(); refresh(); }, { multi: true, all: false });
+  refresh();
+}
+
+/* ---------------- home ---------------- */
+const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
+
+function renderProfile(me) {
+  const p = me.profile;
+  $("#p-avatar").textContent = initial(me.name);
+  $("#p-avatar").style.background = avatarColor(me.name);
+  $("#p-name").textContent = me.name;
+  const bits = p.n_ratings ? [`${p.n_ratings} books rated`, `average ${p.avg_rating}★`] : ["No ratings yet"];
+  if (p.n_to_read) bits.push(`${p.n_to_read} on to-read shelf`);
+  if (p.top_genres.length) bits.push("loves " + p.top_genres.join(", "));
+  else if (me.genres.length) bits.push("likes " + me.genres.join(", "));
+  $("#p-meta").textContent = bits.join(" · ");
+  $("#p-tags").innerHTML = p.taste_tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("");
+  const max = Math.max(...Object.values(p.rating_histogram), 1);
+  $("#p-hist").hidden = !p.n_ratings;
+  $("#p-hist").innerHTML = [1, 2, 3, 4, 5].map((s) => {
+    const v = p.rating_histogram[s] || 0;
+    return `<div class="hbar"><span>${v}</span><i style="height:${(v / max) * 60}px"></i><span>${s}★</span></div>`;
+  }).join("");
+}
+
+async function renderHome() {
+  const grid = $("#home-grid");
+  skeleton(grid);
+  const me = await loadMe();
+  if (!me) return route();
+  $("#home-eyebrow").textContent = me.is_demo ? `Demo account · Goodreads reader #${me.dataset_user_id}` : "Your recommendations";
+  $("#home-title").textContent = `${greeting()}, ${me.name}`;
+  renderProfile(me);
+  $("#home-empty").hidden = me.is_demo || me.profile.n_ratings > 0;
+  const load = async () => {
+    const ms = await loadMyRecs(grid, state.homeControls);
+    $("#home-note").textContent = `scored all ${state.meta.dataset.n_books.toLocaleString()} books in ${ms} ms`;
+  };
+  state.homeControls = makeControls($("#home-controls"), load);
+  load();
+}
+
+/* ---------------- my books ---------------- */
+function renderRated() {
+  const books = Object.values(state.myBooks)
+    .map((b) => ({ ...b, user_rating: state.myRatings[b.id] }))
+    .sort((a, b) => b.user_rating - a.user_rating);
+  $("#lib-count").textContent = books.length;
+  renderGrid($("#lib-rated"), books, { userRating: true, empty: "You haven't rated any books yet. Start below!" });
+}
+
+async function renderLibrary() {
+  const me = await loadMe();
+  if (!me) return route();
+  $("#lib-lede").textContent = me.is_demo
+    ? `These are ${me.name}'s real ratings from the Goodreads dataset. Demo accounts are read-only: sign up to rate books yourself.`
+    : "Everything you have rated. Click a book to change your rating.";
+  renderRated();
+  $("#lib-toread-wrap").hidden = !me.profile.to_read.length;
+  $("#lib-toread").innerHTML = me.profile.to_read.map((b) => bookCard(b)).join("");
+  remember(me.profile.to_read);
+  $("#lib-rate-wrap").hidden = me.is_demo;
+  if (me.is_demo) return;
+  const rater = mountRater($("#lib-rater"), renderRated);
+  genreChips($("#lib-genres"), me.genres, async (gs) => { await setMyGenres(gs); rater.reload(); }, { multi: true, all: false });
+}
+
+// After rating a book in the details popup, refresh the page behind it.
+const refreshView = debounce(() => {
+  if (state.view === "home") renderHome();
+  else if (state.view === "library") renderLibrary();
+  else if (state.view === "onboarding") renderOnboarding();
+}, 300);
 
 /* ---------------- insights ---------------- */
 function barCell(v, max, digits = 4) {
@@ -651,6 +824,9 @@ function setupTheme() {
 (async function boot() {
   setupTheme();
   setupSearch();
+  setupAuthForms();
   [state.meta, state.genres] = await Promise.all([api("/api/stats"), api("/api/genres")]);
+  await loadMe();
+  renderNav();
   route();
 })();
