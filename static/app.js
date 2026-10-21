@@ -1,4 +1,4 @@
-/* Folio — frontend. Plain JS, no build step. */
+/* Plotline — frontend. Plain JS, no build step. */
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
@@ -11,7 +11,7 @@ const state = {
   meta: null,
   genres: [],
   discover: { genre: null, sort: "popular", offset: 0 },
-  token: store.get("folio.token", null),
+  token: store.get("plotline.token", null),
   me: null,
   myRatings: {},
   myBooks: {},
@@ -257,14 +257,14 @@ async function loadMe() {
 
 function setToken(token) {
   state.token = token;
-  store.set("folio.token", token);
+  store.set("plotline.token", token);
 }
 
 async function afterLogin(res, isNew) {
   setToken(res.token);
   await loadMe();
   renderNav();
-  toast(isNew ? `Welcome to Folio, ${state.me.name}!` : `Welcome back, ${state.me.name}!`);
+  toast(isNew ? `Welcome to Plotline, ${state.me.name}!` : `Welcome back, ${state.me.name}!`);
   location.hash = isNew ? "onboarding" : "home";
 }
 
@@ -809,7 +809,7 @@ function initInsights() {
 
 /* ---------------- theme & boot ---------------- */
 function setupTheme() {
-  const saved = store.get("folio.theme", null);
+  const saved = store.get("plotline.theme", null);
   if (saved) document.documentElement.dataset.theme = saved;
   $("#theme-toggle").onclick = () => {
     const dark = document.documentElement.dataset.theme
@@ -817,7 +817,7 @@ function setupTheme() {
       : matchMedia("(prefers-color-scheme: dark)").matches;
     const next = dark ? "light" : "dark";
     document.documentElement.dataset.theme = next;
-    store.set("folio.theme", next);
+    store.set("plotline.theme", next);
   };
 }
 

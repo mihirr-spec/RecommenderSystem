@@ -439,3 +439,7 @@ tr.hl { background: color-mix(in srgb, var(--good) 7%, transparent); }
   .auth-card { padding: 22px; }
   .demo-card .go { display: none; }
 }
+
+/* ---------- Plotline logo ---------- */
+.brand-logo { height: 30px; width: auto; display: block; }
+.brand-name span { color: var(--accent); }

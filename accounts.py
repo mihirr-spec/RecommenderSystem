@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 # Vercel only allows writing to /tmp; locally the database sits next to the app.
-DB_PATH = Path("/tmp/folio.db") if os.environ.get("VERCEL") else Path(__file__).parent / "folio.db"
+DB_PATH = Path("/tmp/plotline.db") if os.environ.get("VERCEL") else Path(__file__).parent / "plotline.db"
 
 # Demo accounts: each one logs in as a real reader from the Goodbooks-10k data.
 DEMO_ACCOUNTS = [
@@ -75,7 +75,7 @@ def init_db():
         for d in DEMO_ACCOUNTS:
             con.execute(
                 "INSERT OR IGNORE INTO users (name, email, dataset_user_id) VALUES (?, ?, ?)",
-                (d["name"], f"{d['key']}@demo.folio", d["dataset_user_id"]),
+                (d["name"], f"{d['key']}@demo.plotline", d["dataset_user_id"]),
             )
 
 
@@ -129,7 +129,7 @@ def log_in(email, password):
 
 def log_in_demo(key):
     with _db() as con:
-        row = con.execute("SELECT * FROM users WHERE email = ?", (f"{key}@demo.folio",)).fetchone()
+        row = con.execute("SELECT * FROM users WHERE email = ?", (f"{key}@demo.plotline",)).fetchone()
         if not row:
             return None
         return _new_session(con, row["id"]), _public(row)

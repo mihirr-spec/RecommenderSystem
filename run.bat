@@ -15,7 +15,7 @@ if not exist artifacts\cf.npz (
 )
 
 echo.
-echo  Folio is running at http://127.0.0.1:8000   (Ctrl+C to stop)
+echo  Plotline is running at http://127.0.0.1:8000   (Ctrl+C to stop)
 echo.
 .venv\Scripts\python.exe app.py --open
 goto :eof

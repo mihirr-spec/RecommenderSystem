@@ -23,7 +23,7 @@ def load_all():
     books = data.load_books()
     ratings = data.load_ratings()
     book_tags = data.load_tags(books)
-    books["genres"] = data.assign_genres(books, book_tags)
+    books["genres"] = data.assign_genres(books, book_tags, overrides=data.load_genre_overrides())
     tag_lists = data.top_tags(book_tags)
     books["tags"] = books["book_id"].map(tag_lists).apply(
         lambda t: t if isinstance(t, list) else []

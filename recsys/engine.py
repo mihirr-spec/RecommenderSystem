@@ -43,9 +43,14 @@ class Recommender:
         m = np.quantile(v, 0.5)
         c = np.average(r, weights=v)
         self.bayes = v / (v + m) * r + m / (v + m) * c
-        self.genre_mask = {
-            g: cat["genres"].apply(lambda gs, g=g: g in gs).to_numpy() for g in GENRES
+        # How well each book fits each genre: 1 if it is the book's main genre,
+        # less for its later genres, 0 otherwise.
+        fit_by_rank = (1.0, 0.6, 0.4, 0.3)
+        self.genre_fit = {
+            g: cat["genres"].apply(lambda gs, g=g: fit_by_rank[gs.index(g)] if g in gs else 0.0).to_numpy()
+            for g in GENRES
         }
+        self.genre_mask = {g: f > 0 for g, f in self.genre_fit.items()}
         self.search_text = (cat["title"] + " " + cat["authors"]).str.lower().to_numpy().astype(str)
 
     # ------------------------------------------------------------ helpers
@@ -103,7 +108,7 @@ class Recommender:
         cb_s = scoring.content_scores(self.content, scoring.content_profiles(self.content, row))
         hybrid = scoring.hybrid_scores(knn_s, cb_s, svd_s, self.pop, **weights)[0]
         for g in boost_genres:
-            hybrid = hybrid + 0.75 * self.genre_mask[g]
+            hybrid = hybrid + 0.75 * self.genre_fit[g]
         # "Taste match": cosine between the book's tags and the reader's taste
         # profile, relative to the reader's single best-matching book.
         cb = np.clip(cb_s[0], 0, None)
@@ -164,7 +169,8 @@ class Recommender:
     def popular(self, genre=None, sort="popular", n=24, offset=0):
         score = self.pop if sort == "popular" else self.bayes
         if genre:
-            score = np.where(self.genre_mask[genre], score, -np.inf)
+            # Books whose main genre this is come before ones where it is secondary.
+            score = np.where(self.genre_mask[genre], score + 1.5 * score.std() * self.genre_fit[genre], -np.inf)
         order = np.argsort(-score)[offset:offset + n]
         return [self.book(i) for i in order if np.isfinite(score[i])]
 
@@ -265,6 +271,46 @@ class Recommender:
             "rating_histogram": {str(k): int((np.round(stars) == k).sum()) for k in range(1, 6) if (np.round(stars) == k).any()},
         }
 
+    def _starter_picks(self, genres, n, genre=None, per_author=2):
+        """Picks for a reader with no ratings yet: the best books in each chosen
+        genre, taking turns between genres, with at most `per_author` books by
+        the same author so one series can't fill the list."""
+        base = self.bayes + 0.15 * self.pop
+        spread = 1.5 * base.std()
+        if genre:
+            base = np.where(self.genre_mask[genre], base, -np.inf)
+        lists = [(None, np.argsort(-base))]
+        if genres:
+            lists = [
+                (g, np.argsort(-np.where(self.genre_mask[g], base + spread * self.genre_fit[g], -np.inf)))
+                for g in genres
+            ]
+        picks, seen, authors = [], set(), {}
+        pos = [0] * len(lists)
+        while len(picks) < n and any(p < self.n for p in pos):
+            for i, (g, order) in enumerate(lists):
+                while pos[i] < self.n:
+                    r = int(order[pos[i]])
+                    pos[i] += 1
+                    if g and not self.genre_mask[g][r] or genre and not self.genre_mask[genre][r]:
+                        pos[i] = self.n  # this genre's list is used up
+                        break
+                    author = self.catalog.iloc[r]["authors"].split(",")[0]
+                    if r in seen or authors.get(author, 0) >= per_author:
+                        continue
+                    seen.add(r)
+                    authors[author] = authors.get(author, 0) + 1
+                    picks.append((r, g))
+                    break
+                if len(picks) >= n:
+                    break
+        return [
+            self.book(r, match=None, reason={
+                "type": "genre", "text": f"Top rated in {g}" if g else "A reader favourite",
+            })
+            for r, g in picks
+        ]
+
     def recommend_user(self, uid, n=24, alpha=None, pop_weight=None, genre=None, svd_weight=None):
         r, t, row = self._user_row(uid)
         u = self.cf["user_row"][uid]
@@ -286,21 +332,7 @@ class Recommender:
         stars = np.array(list(rated.values()), dtype=float)
 
         if len(idx) == 0:
-            score = self.bayes + 0.15 * self.pop
-            if genres:
-                in_any = np.any([self.genre_mask[g] for g in genres], axis=0)
-                score = np.where(in_any, score + 0.1 * sum(self.genre_mask[g] for g in genres), -np.inf)
-            if genre:
-                score = np.where(self.genre_mask[genre], score, -np.inf)
-            recs = scoring.top_n(score, n)
-            return [
-                self.book(r, match=None, reason={
-                    "type": "genre",
-                    "text": "Top rated in " + ", ".join(g for g in self.catalog.iloc[int(r)]["genres"] if g in genres)
-                    if genres else "A reader favourite",
-                })
-                for r in recs
-            ]
+            return self._starter_picks(genres, n, genre)
 
         bu, pu = scoring.fold_in(self.cf, idx, stars, self.fold_reg)
         svd_s = scoring.cf_scores(self.cf, bu, pu)

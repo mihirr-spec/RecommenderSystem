@@ -1,4 +1,6 @@
-# Folio: Book Recommender System
+<p align="center"><img src="docs/logo.png" alt="Plotline" width="360"></p>
+
+# Plotline: Book Recommender System
 
 A book recommender system built on the [Goodbooks-10k](https://github.com/zygmuntz/goodbooks-10k) dataset (≈980k ratings, 53k users, 10k books), with a web app to try it out.
 
@@ -33,7 +35,7 @@ python app.py --open
 ```
 The trained model is already in `artifacts/`. To retrain it, run `python -m recsys.train`.
 
-User accounts are stored in `folio.db` (created automatically). Passwords are hashed and never stored in plain text.
+User accounts are stored in `plotline.db` (created automatically). Passwords are hashed and never stored in plain text.
 
 ## Project structure
 ```

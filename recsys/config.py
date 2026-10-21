@@ -10,31 +10,42 @@ RANDOM_STATE = 42
 RELEVANCE_THRESHOLD = 4.0  # a rating >= 4 counts as "the user liked it"
 TOP_K = 10
 
-# Curated genres shown in the UI. Each genre is a set of Goodreads tags.
+# Curated genres shown in the UI. Each genre matches Goodreads tags by keyword,
+# so compound tags count too ("horror-thriller" counts for Horror and Thriller).
 GENRES = {
-    "Fantasy": ["fantasy", "urban-fantasy", "magic", "epic-fantasy", "high-fantasy"],
-    "Science Fiction": ["science-fiction", "sci-fi", "scifi", "space-opera"],
-    "Romance": ["romance", "contemporary-romance", "historical-romance", "chick-lit"],
-    "Mystery & Crime": ["mystery", "crime", "mysteries", "detective"],
-    "Thriller": ["thriller", "suspense", "mystery-thriller", "thrillers"],
-    "Horror": ["horror"],
-    "Young Adult": ["young-adult", "ya", "teen", "ya-fiction"],
-    "Classics": ["classics", "classic", "1001-books"],
-    "Historical Fiction": ["historical-fiction", "historical"],
-    "Non-Fiction": ["non-fiction", "nonfiction"],
-    "Biography & Memoir": ["biography", "memoir", "autobiography", "memoirs"],
-    "History": ["history"],
-    "Science": ["science", "popular-science"],
-    "Philosophy": ["philosophy"],
-    "Self-Help & Psychology": ["self-help", "psychology", "personal-development"],
-    "Business": ["business", "economics"],
-    "Children's": ["childrens", "children", "children-s", "picture-books", "kids", "middle-grade"],
-    "Comics & Manga": ["graphic-novels", "comics", "manga", "graphic-novel"],
-    "Poetry": ["poetry"],
-    "Dystopian": ["dystopian", "dystopia"],
-    "Paranormal": ["paranormal", "vampires", "supernatural", "paranormal-romance"],
-    "Humor": ["humor", "humour", "funny", "comedy"],
+    "Fantasy": r"fantasy|magic",
+    "Science Fiction": r"sci-?fi|scifi|science-fiction|sf|space-opera",
+    "Romance": r"romance|romantic|chick-?lit",
+    "Mystery & Crime": r"mystery|mysteries|crime|detective|murder-mystery|whodunit",
+    "Thriller": r"thrillers?|suspense",
+    "Horror": r"horror|scary",
+    "Young Adult": r"young-adult|ya|teen",
+    "Classics": r"classics?|1001-books|1001",
+    "Historical Fiction": r"historical-fiction|historical|historical-romance",
+    "Non-Fiction": r"non-?fiction",
+    "Biography & Memoir": r"biography|biographies|memoirs?|autobiography",
+    "History": r"history|american-history|world-history|military-history",
+    "Science": r"science|popular-science",
+    "Philosophy": r"philosophy",
+    "Self-Help & Psychology": r"self-help|psychology|personal-development|self-improvement",
+    "Business": r"business|economics|entrepreneurship",
+    "Children's": r"childrens|children|children-s|picture-books?|kids|middle-grade|juvenile",
+    "Comics & Manga": r"graphic-novels?|comics|comic-books?|manga",
+    "Poetry": r"poetry|poems",
+    "Dystopian": r"dystopian|dystopia|post-apocalyptic",
+    "Paranormal": r"paranormal|vampires?|supernatural|werewolves|shapeshifters|ghosts",
+    "Humor": r"humou?r|funny|comedy",
 }
+
+# Genres that describe a book's form or audience rather than its content. They
+# are judged separately, so a huge "classics" count can't hide "romance".
+FORM_GENRES = {"Classics", "Young Adult", "Children's", "Non-Fiction", "Comics & Manga", "Poetry"}
+
+# A book tagged "non-fiction" by more readers than "fiction" can't be in a
+# fiction-only genre, and the other way round.
+FICTION_ONLY = {"Fantasy", "Science Fiction", "Romance", "Mystery & Crime", "Thriller", "Horror",
+                "Historical Fiction", "Dystopian", "Paranormal"}
+NONFICTION_ONLY = {"Non-Fiction", "Biography & Memoir", "History", "Science", "Self-Help & Psychology", "Business"}
 
 # Tags that describe a reader's shelf rather than the book itself.
 NOISE_TAG = re.compile(

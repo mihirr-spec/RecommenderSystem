@@ -1,4 +1,4 @@
-"""Folio — book recommender web app.
+"""Plotline — book recommender web app.
 
     python -m recsys.train      # once, to build artifacts/
     python app.py               # then open http://127.0.0.1:8000
@@ -22,7 +22,7 @@ if not (ARTIFACTS_DIR / "cf.npz").exists():
 
 rec = Recommender()
 accounts.init_db()
-app = FastAPI(title="Folio Book Recommender", version="1.0")
+app = FastAPI(title="Plotline Book Recommender", version="1.0")
 
 Alpha = Query(None, ge=0, le=1, description="0 = content-based, 1 = collaborative item-kNN")
 SvdWeight = Query(None, ge=0, le=2, description="weight of the SVD star-rating model")

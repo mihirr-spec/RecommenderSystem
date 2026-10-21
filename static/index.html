@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Folio — Book Recommender</title>
+  <title>Plotline — Book Recommender</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23b4532a'/><text x='16' y='23' font-family='Georgia' font-size='20' text-anchor='middle' fill='white'>F</text></svg>">
+  <link rel="icon" type="image/png" href="/static/favicon.png">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
       <a href="#" class="brand">
-        <span class="brand-mark">F</span>
-        <span class="brand-name">Folio</span>
+        <img class="brand-logo" src="/static/logo-mark.png" alt="">
+        <span class="brand-name">Plot<span>line</span></span>
       </a>
       <nav class="tabs" id="tabs"></nav>
       <div class="search" id="search">
@@ -37,7 +37,7 @@
         <div>
           <p class="eyebrow">A hybrid book recommender</p>
           <h1>Find the book you'll<br><em>love next.</em></h1>
-          <p class="lede">Folio learns your taste from a few ratings and picks books for you from a catalogue of 10,000, and it tells you <i>why</i> it picked each one.</p>
+          <p class="lede">Plotline learns your taste from a few ratings and picks books for you from a catalogue of 10,000, and it tells you <i>why</i> it picked each one.</p>
           <div class="hero-actions">
             <a class="btn primary" href="#signup">Get started, it's free</a>
             <a class="btn ghost" href="#demos" data-scroll="demos">Try a demo account</a>
@@ -98,7 +98,7 @@
           <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
           <p class="form-error" hidden></p>
           <button class="btn primary block" type="submit">Log in</button>
-          <p class="muted small center">New to Folio? <a href="#signup">Create an account</a></p>
+          <p class="muted small center">New to Plotline? <a href="#signup">Create an account</a></p>
           <div class="divider"><span>or try a demo account</span></div>
           <div class="demo-list" id="login-demos"></div>
         </form>
@@ -233,7 +233,7 @@
   </main>
 
   <footer class="footer">
-    <span>Folio · Goodbooks-10k · item-kNN + TF-IDF content + SVD hybrid</span>
+    <span>Plotline · Goodbooks-10k · item-kNN + TF-IDF content + SVD hybrid</span>
     <span><a href="#insights">Model insights</a> · <a href="/docs" target="_blank">API docs</a></span>
   </footer>
 
