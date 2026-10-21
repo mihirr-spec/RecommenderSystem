@@ -10,7 +10,7 @@ const store = {
 const state = {
   meta: null,
   genres: [],
-  discover: { genre: null, sort: "popular", offset: 0 },
+  discover: { genres: [], sort: "popular", offset: 0 },
   token: store.get("plotline.token", null),
   me: null,
   myRatings: {},
@@ -88,6 +88,8 @@ function bookCard(b, opt = {}) {
   if (opt.predicted && b.predicted_rating) meta.push(`<span title="SVD predicted rating">pred. ${b.predicted_rating.toFixed(1)}</span>`);
   else if (!opt.userRating) meta.push(`<span>${fmt(b.ratings_count)} ratings</span>`);
   if (opt.similarity && b.shared_tags?.length) meta.push(`<span class="shared">${esc(b.shared_tags.join(" · "))}</span>`);
+  const genres = opt.genres && b.genres?.length
+    ? `<div class="book-genres">${b.genres.map((g) => opt.genres.includes(g) ? `<b>${esc(g)}</b>` : esc(g)).join(" · ")}</div>` : "";
   const reason = opt.reason && b.reason
     ? `<div class="reason ${b.reason.type}" ${b.reason.book_id ? `data-book="${b.reason.book_id}"` : ""}>${esc(b.reason.text)}</div>` : "";
   return `
@@ -98,6 +100,7 @@ function bookCard(b, opt = {}) {
         <div class="book-author">${esc(b.authors)}</div>
       </div>
       <div class="book-meta">${meta.join("")}</div>
+      ${genres}
       ${reason}
     </article>`;
 }
@@ -438,13 +441,13 @@ async function renderAuth(view) {
 /* ---------------- discover ---------------- */
 function genreChips(el, selected, onToggle, { multi = false, all = true } = {}) {
   const sel = new Set(multi ? selected : selected ? [selected] : []);
-  el.innerHTML = (all && !multi ? `<button class="chip ${sel.size ? "" : "on"}" data-g="">All</button>` : "") +
+  el.innerHTML = (all ? `<button class="chip ${sel.size ? "" : "on"}" data-g="">All</button>` : "") +
     state.genres.map((g) => `<button class="chip ${sel.has(g.name) ? "on" : ""}" data-g="${esc(g.name)}">${esc(g.name)}<small>${fmt(g.count)}</small></button>`).join("");
   el.onclick = (e) => {
     const c = e.target.closest(".chip");
     if (!c) return;
     const g = c.dataset.g || null;
-    if (multi) { sel.has(g) ? sel.delete(g) : sel.add(g); onToggle([...sel]); }
+    if (multi) { if (!g) sel.clear(); else sel.has(g) ? sel.delete(g) : sel.add(g); onToggle([...sel]); }
     else onToggle(g);
     genreChips(el, multi ? [...sel] : g, onToggle, { multi, all });
   };
@@ -455,16 +458,17 @@ async function loadDiscover(append = false) {
   const grid = $("#discover-grid");
   if (!append) { d.offset = 0; skeleton(grid); }
   const params = new URLSearchParams({ sort: d.sort, n: 24, offset: d.offset });
-  if (d.genre) params.set("genre", d.genre);
+  d.genres.forEach((g) => params.append("genre", g));
   const books = remember(await api(`/api/popular?${params}`));
-  const html = books.map((b) => bookCard(b)).join("");
+  const html = books.map((b) => bookCard(b, { genres: d.genres })).join("");
   if (append) grid.insertAdjacentHTML("beforeend", html); else grid.innerHTML = html;
   $("#discover-more").hidden = books.length < 24;
-  $("#discover-title").textContent = `${d.sort === "popular" ? "Most popular" : "Top rated"}${d.genre ? " in " + d.genre : ""}`;
+  $("#discover-title").textContent = `${d.sort === "popular" ? "Most popular" : "Top rated"}${d.genres.length ? " in " + d.genres.join(" + ") : ""}`;
+  $("#discover-note").textContent = d.genres.length > 1 ? "Books with all your selected genres come first." : "Pick one or more genres to mix them.";
 }
 
 function initDiscover() {
-  genreChips($("#genre-chips"), null, (g) => { state.discover.genre = g; loadDiscover(); });
+  genreChips($("#genre-chips"), [], (gs) => { state.discover.genres = gs; loadDiscover(); }, { multi: true });
   $("#sort-seg").onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;

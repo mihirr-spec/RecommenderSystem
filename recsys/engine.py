@@ -166,11 +166,18 @@ class Recommender:
         return [names[i] for i in top if arr[i] > 0 and not names[i].startswith("author:")][:n]
 
     # ------------------------------------------------------------ public API
-    def popular(self, genre=None, sort="popular", n=24, offset=0):
+    def popular(self, genres=(), sort="popular", n=24, offset=0):
+        """Popular or top-rated books, optionally in one or more genres. With
+        several genres, books that have all of them come first, then books
+        with most of them; within that, books where the genres are their main
+        ones rank higher."""
+        if isinstance(genres, str):
+            genres = [genres]
         score = self.pop if sort == "popular" else self.bayes
-        if genre:
-            # Books whose main genre this is come before ones where it is secondary.
-            score = np.where(self.genre_mask[genre], score + 1.5 * score.std() * self.genre_fit[genre], -np.inf)
+        if genres:
+            matched = sum(self.genre_mask[g].astype(int) for g in genres)
+            fit = sum(self.genre_fit[g] for g in genres)
+            score = np.where(matched > 0, 10 * score.std() * matched + 1.5 * score.std() * fit + score, -np.inf)
         order = np.argsort(-score)[offset:offset + n]
         return [self.book(i) for i in order if np.isfinite(score[i])]
 

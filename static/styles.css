@@ -443,3 +443,6 @@ tr.hl { background: color-mix(in srgb, var(--good) 7%, transparent); }
 /* ---------- Plotline logo ---------- */
 .brand-logo { height: 30px; width: auto; display: block; }
 .brand-name span { color: var(--accent); }
+.book-genres { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.book-genres b { color: var(--accent); font-weight: 600; }
+.chips-note { margin: -6px 0 12px; }

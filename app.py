@@ -51,12 +51,13 @@ def genres():
 
 @app.get("/api/popular")
 def popular(
-    genre: Optional[str] = None,
+    genre: List[str] = Query([], description="one or more genres; books with all of them come first"),
     sort: str = Query("popular", pattern="^(popular|top_rated)$"),
     n: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    check_genre(genre)
+    for g in genre:
+        check_genre(g)
     return rec.popular(genre, sort, n, offset)
 
 
