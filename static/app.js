@@ -412,7 +412,7 @@ function renderView(view) {
   if (view === "library") return renderLibrary();
   if (view === "onboarding") return renderOnboarding();
   if (view === "login" || view === "signup") return renderAuth(view);
-  if (!loaded[view]) { loaded[view] = true; ({ landing: initLanding, discover: initDiscover, insights: initInsights })[view](); }
+  if (!loaded[view]) { loaded[view] = true; ({ landing: initLanding, discover: initDiscover })[view](); }
 }
 
 /* ---------------- landing ---------------- */
@@ -685,124 +685,6 @@ const refreshView = debounce(() => {
   else if (state.view === "library") renderLibrary();
   else if (state.view === "onboarding") renderOnboarding();
 }, 300);
-
-/* ---------------- insights ---------------- */
-function barCell(v, max, digits = 4) {
-  return `<div class="cellbar"><i style="width:${Math.max(4, (v / max) * 90)}px"></i><span>${v.toFixed(digits)}</span></div>`;
-}
-
-function initInsights() {
-  const m = state.meta;
-  const d = m.dataset;
-  const k = m.ranking_protocol.k;
-  const nd = `NDCG@${k}`;
-  const rm = m.rating_metrics;
-  const bestRmse = Math.min(...rm.map((r) => r.RMSE));
-  const rk = m.ranking_metrics;
-  const cols = [`Precision@${k}`, `Recall@${k}`, nd, `HitRate@${k}`, "Coverage"];
-  const best = Object.fromEntries(cols.map((c) => [c, Math.max(...rk.map((r) => r[c]))]));
-  const dist = d.rating_distribution;
-  const maxDist = Math.max(...Object.values(dist));
-  const H = m.hybrid;
-  const byName = (s) => rk.find((r) => r.model.startsWith(s));
-  const hyb = byName("Hybrid"), knn = byName("Item-kNN"), cb = byName("Content"), svd = byName("SVD"), pop = byName("Most Popular");
-  const sv = rm.find((r) => r.model.startsWith("SVD (tuned)"));
-
-  // Hybrid grid heatmap at the chosen SVD weight: rows = alpha, cols = popularity weight.
-  const grid = m.hybrid_grid.filter((g) => g.svd_weight === H.svd_weight);
-  const alphas = [...new Set(grid.map((g) => g.alpha))].sort((a, b) => a - b);
-  const pops = [...new Set(grid.map((g) => g.pop_weight))].sort((a, b) => a - b);
-  const vals = grid.map((g) => g[nd]);
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  const cell = (a, p) => {
-    const g = grid.find((x) => x.alpha === a && x.pop_weight === p);
-    const t = (g[nd] - lo) / (hi - lo || 1);
-    const isBest = a === H.alpha && p === H.pop_weight;
-    return `<div class="cell" style="background:color-mix(in srgb, var(--good) ${Math.round(8 + t * 72)}%, var(--paper));color:${t > .55 ? "#fff" : "var(--ink)"};${isBest ? "outline:2px solid var(--ink);" : ""}">${g[nd].toFixed(3)}</div>`;
-  };
-  const fold = m.fold_in.grid;
-  const foldMax = Math.max(...fold.map((f) => f.RMSE));
-  const foldMin = Math.min(...fold.map((f) => f.RMSE));
-  const lift = ((hyb[nd] / cb[nd] - 1) * 100).toFixed(0);
-
-  $("#insights-body").innerHTML = `
-    <div class="kpis">
-      <div class="card kpi"><b>${hyb[nd].toFixed(3)}</b><span>NDCG@${k} of the hybrid (best model)</span></div>
-      <div class="card kpi"><b>${(hyb[`HitRate@${k}`] * 100).toFixed(0)}%</b><span>of test readers get a book they loved in their top ${k}</span></div>
-      <div class="card kpi"><b>${(hyb.Coverage * 100).toFixed(0)}%</b><span>of the catalogue gets recommended to someone</span></div>
-      <div class="card kpi"><b>${sv.RMSE.toFixed(3)}</b><span>star-rating RMSE of the tuned SVD</span></div>
-    </div>
-
-    <div class="ins-grid">
-      <div class="card panel wide">
-        <h3>How it works</h3>
-        <p class="sub">A hybrid recommender. Four signals are scored over all ${d.n_books.toLocaleString()} books, standardised to z-scores, then blended with weights tuned on validation readers.</p>
-        <div class="pipeline">
-          <div class="pipe"><b>Item-kNN (co-reading)</b><p>Cosine similarity between books based on who read them, keeping ${m.knn_neighbours} neighbours per book. Each book a reader rated votes for its neighbours.</p></div>
-          <div class="pipe"><b>Content-based</b><p>TF-IDF over ${d.n_content_features.toLocaleString()} Goodreads tags and authors. A reader's profile is the rating-weighted sum of the books they read.</p></div>
-          <div class="pipe"><b>SVD star-rating model</b><p>Matrix factorisation with ${m.svd_params.n_factors} latent factors, tuned by cross-validation. It predicts the star rating shown on each card.</p></div>
-          <div class="pipe"><b>Popularity + explain</b><p>Goodreads-wide popularity as an optional prior. Each pick is explained by the most similar book the reader loved.</p></div>
-        </div>
-        <div class="formula">score = α·z(kNN) + (1−α)·z(content) + w<sub>svd</sub>·z(r̂<sub>SVD</sub>) + w<sub>pop</sub>·z(log pop) &nbsp;&nbsp;|&nbsp;&nbsp; tuned: α = ${H.alpha}, w<sub>svd</sub> = ${H.svd_weight}, w<sub>pop</sub> = ${H.pop_weight}</div>
-        <p class="sub" style="margin:0">New readers work straight away: kNN and content need only their ratings. The SVD vector is <b>folded in</b> by ridge regression against the fixed book factors (λ = ${m.fold_in.reg}), and its weight grows with confidence n/(n+3).</p>
-      </div>
-
-      <div class="card panel wide">
-        <h3>Top-${k} recommendation quality</h3>
-        <p class="sub">For ${m.ranking_protocol.n_test_users.toLocaleString()} test readers, each model ranks <b>every book they haven't rated</b>. A hit is a hidden book they rated ≥ ${m.ranking_protocol.relevance_threshold}★. Higher is better. A random ranking scores about 0.0004.</p>
-        <table>
-          <tr><th>Model</th>${cols.map((c) => `<th>${c}</th>`).join("")}</tr>
-          ${rk.map((r) => `<tr class="${r.model.startsWith("Hybrid") ? "hl" : ""}"><td>${esc(r.model)}</td>${cols.map((c) => `<td class="num ${r[c] === best[c] ? "best" : ""}">${barCell(r[c], best[c], c === "Coverage" ? 3 : 4)}</td>`).join("")}</tr>`).join("")}
-        </table>
-        <div class="callout">The hybrid improves NDCG@${k} by <b>${lift}%</b> over content alone (${cb[nd].toFixed(3)} → ${hyb[nd].toFixed(3)}). Item-kNN alone scores ${knn[nd].toFixed(3)}.
-          Two findings about this data: <b>popularity is useless here</b> (NDCG ${pop[nd].toFixed(4)}), because Goodbooks-10k was sampled to about 100 ratings per book, so bestsellers are no more likely to appear in a user's history.
-          <b>SVD ranks poorly</b> (NDCG ${svd[nd].toFixed(4)}) despite the best RMSE: predicting <i>how many stars</i> is a different task from predicting <i>which books</i> someone reads.</div>
-      </div>
-
-      <div class="card panel">
-        <h3>Rating prediction</h3>
-        <p class="sub">Error predicting held-out star ratings. Lower is better.</p>
-        <table>
-          <tr><th>Model</th><th>RMSE</th><th>MAE</th></tr>
-          ${rm.map((r) => `<tr class="${r.RMSE === bestRmse ? "hl" : ""}"><td>${esc(r.model)}</td><td class="num ${r.RMSE === bestRmse ? "best" : ""}">${r.RMSE.toFixed(4)}</td><td class="num">${r.MAE.toFixed(4)}</td></tr>`).join("")}
-        </table>
-      </div>
-
-      <div class="card panel">
-        <h3>Ratings in the dataset</h3>
-        <p class="sub">${fmt(d.n_ratings)} ratings from ${fmt(d.n_users)} readers, and ${(d.sparsity * 100).toFixed(2)}% of the user × book matrix is empty. Readers rate generously.</p>
-        <div class="chart-bars">
-          ${Object.entries(dist).map(([s, v]) => `<div class="col"><em>${fmt(v)}</em><i style="height:${(v / maxDist) * 130}px"></i><small>${s}★</small></div>`).join("")}
-        </div>
-      </div>
-
-      <div class="card panel">
-        <h3>Tuning the hybrid blend</h3>
-        <p class="sub">NDCG@${k} on ${m.ranking_protocol.n_val_users.toLocaleString()} validation readers (separate from the test readers), at w<sub>svd</sub> = ${H.svd_weight}. Rows: α (co-reading share). Columns: popularity weight. The outlined cell is the one chosen.</p>
-        <div class="heat" style="grid-template-columns: 48px repeat(${pops.length}, 1fr)">
-          <div class="lab">α \\ pop</div>${pops.map((p) => `<div class="lab">${p}</div>`).join("")}
-          ${alphas.map((a) => `<div class="lab">${a}</div>${pops.map((p) => cell(a, p)).join("")}`).join("")}
-        </div>
-      </div>
-
-      <div class="card panel">
-        <h3>Cold-start fold-in</h3>
-        <p class="sub">Known readers were treated as new: their SVD vectors were rebuilt from training ratings only. The chart shows test RMSE for each ridge strength λ. Chosen λ = ${m.fold_in.reg}.</p>
-        <div class="chart-bars">
-          ${fold.map((f) => `<div class="col"><em>${f.RMSE.toFixed(3)}</em><i style="height:${20 + ((f.RMSE - foldMin) / (foldMax - foldMin || 1)) * 110}px;${f.reg === m.fold_in.reg ? "background:var(--good)" : ""}"></i><small>λ=${f.reg}</small></div>`).join("")}
-        </div>
-      </div>
-
-      <div class="card panel wide">
-        <h3>SVD hyper-parameter search</h3>
-        <p class="sub">Randomised search with 3-fold cross-validation on a 300k-rating sample of the training set.</p>
-        <table>
-          <tr><th>Factors</th><th>Epochs</th><th>Learning rate</th><th>Regularisation</th><th>CV RMSE</th><th>CV MAE</th></tr>
-          ${m.svd_tuning.slice(0, 6).map((t, i) => `<tr class="${i === 0 ? "hl" : ""}"><td>${t.param_n_factors}</td><td>${t.param_n_epochs}</td><td>${t.param_lr_all}</td><td>${t.param_reg_all}</td><td class="num ${i === 0 ? "best" : ""}">${t.mean_test_rmse.toFixed(4)}</td><td class="num">${t.mean_test_mae.toFixed(4)}</td></tr>`).join("")}
-        </table>
-      </div>
-    </div>`;
-}
 
 /* ---------------- theme & boot ---------------- */
 function setupTheme() {
