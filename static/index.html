@@ -72,7 +72,6 @@
           <div class="card feature"><span class="f-icon">🏷️</span><h3>Tags &amp; authors</h3><p>A content model compares Goodreads tags and authors with your taste profile.</p></div>
           <div class="card feature"><span class="f-icon">⭐</span><h3>Star predictions</h3><p>SVD matrix factorisation predicts how many stars you would give each book.</p></div>
         </div>
-        <p class="center"><a class="btn ghost" href="#insights">See how well it performs →</a></p>
       </section>
 
       <section class="land-section" id="demos">
@@ -176,7 +175,11 @@
         <summary>Tune your recommendations</summary>
         <div class="controls card" id="home-controls"></div>
       </details>
-      <div class="section-head"><h2>Recommended for you</h2><span class="muted small" id="home-note"></span></div>
+      <div class="mood card">
+        <div class="mood-head"><h3>What are you in the mood for?</h3><span class="muted small">Pick one or more genres to get picks you'll like from them</span></div>
+        <div class="chips" id="home-genres"></div>
+      </div>
+      <div class="section-head"><h2 id="home-recs-title">Recommended for you</h2><span class="muted small" id="home-note"></span></div>
       <div class="grid" id="home-grid"></div>
     </section>
 
@@ -235,7 +238,7 @@
 
   <footer class="footer">
     <span>Plotline · Goodbooks-10k · item-kNN + TF-IDF content + SVD hybrid</span>
-    <span><a href="#insights">Model insights</a> · <a href="/docs" target="_blank">API docs</a></span>
+    <span><a href="/docs" target="_blank">API docs</a></span>
   </footer>
 
   <!-- Book modal -->

@@ -17,6 +17,7 @@ const state = {
   myBooks: {},
   view: null,
   homeControls: null,
+  homeGenres: [],
   demos: null,
 };
 
@@ -297,10 +298,6 @@ async function rateBook(b, stars) {
     location.hash = "signup";
     return false;
   }
-  if (state.me.is_demo) {
-    toast("Demo accounts use their ratings from the dataset. Sign up to rate books yourself.");
-    return false;
-  }
   await api(`/api/me/ratings/${b.id}`, { method: "PUT", body: { rating: stars } });
   if (stars) { state.myRatings[b.id] = stars; state.myBooks[b.id] = b; }
   else { delete state.myRatings[b.id]; delete state.myBooks[b.id]; }
@@ -368,8 +365,8 @@ function setupAuthForms() {
 /* ---------------- navigation ---------------- */
 function renderNav() {
   const tabs = state.me
-    ? [["home", "For You"], ["discover", "Discover"], ["library", "My Books"], ["insights", "Model Insights"]]
-    : [["landing", "Home"], ["discover", "Discover"], ["insights", "Model Insights"]];
+    ? [["home", "For You"], ["discover", "Discover"], ["library", "My Books"]]
+    : [["landing", "Home"], ["discover", "Discover"]];
   $("#tabs").innerHTML = tabs.map(([v, label]) => `<a href="#${v === "landing" ? "" : v}" data-view="${v}">${label}</a>`).join("");
   $("#auth-area").innerHTML = state.me
     ? `<span class="user-chip"><span class="avatar sm" style="background:${avatarColor(state.me.name)}">${initial(state.me.name)}</span>
@@ -384,7 +381,7 @@ function markTab() {
   $$("#tabs a").forEach((a) => a.classList.toggle("on", a.dataset.view === state.view));
 }
 
-const VIEWS = ["landing", "login", "signup", "onboarding", "home", "library", "discover", "insights"];
+const VIEWS = ["landing", "login", "signup", "onboarding", "home", "library", "discover"];
 const PRIVATE = new Set(["onboarding", "home", "library"]);
 const loaded = {};
 
@@ -483,7 +480,7 @@ function initDiscover() {
 /* ---------------- recommendation controls ---------------- */
 function makeControls(el, onChange) {
   const def = state.meta.hybrid_default;
-  const c = { alpha: def.alpha, svd_weight: def.svd_weight, pop_weight: def.pop_weight, genre: "" };
+  const c = { alpha: def.alpha, svd_weight: def.svd_weight, pop_weight: def.pop_weight };
   el.innerHTML = `
     <div class="slider">
       <label>Strategy <span id="${el.id}-a"></span></label>
@@ -500,10 +497,6 @@ function makeControls(el, onChange) {
       <input type="range" min="0" max="1" step="0.05" value="${c.pop_weight}" data-k="pop_weight">
       <div class="ends"><span>Hidden gems</span><span>Bestsellers</span></div>
     </div>
-    <div class="slider">
-      <label>Only show genre</label>
-      <select data-k="genre"><option value="">Any genre</option>${state.genres.map((g) => `<option>${esc(g.name)}</option>`).join("")}</select>
-    </div>
     <div class="reset"><span>Defaults were tuned on validation users to maximise NDCG@10 (α = ${def.alpha}, SVD = ${def.svd_weight}, popularity = ${def.pop_weight}).</span><button class="link" type="button">Reset to tuned</button></div>`;
   const label = () => {
     $(`#${el.id}-a`).textContent = c.alpha === 0 ? "pure content" : c.alpha === 1 ? "pure co-reading" : `${Math.round(c.alpha * 100)}% co-reading · ${Math.round((1 - c.alpha) * 100)}% content`;
@@ -514,16 +507,15 @@ function makeControls(el, onChange) {
   el.oninput = (e) => {
     const k = e.target.dataset.k;
     if (!k) return;
-    c[k] = k === "genre" ? e.target.value : +e.target.value;
+    c[k] = +e.target.value;
     label();
     fire();
   };
   $(".reset .link", el).onclick = () => {
-    c.alpha = def.alpha; c.svd_weight = def.svd_weight; c.pop_weight = def.pop_weight; c.genre = "";
+    c.alpha = def.alpha; c.svd_weight = def.svd_weight; c.pop_weight = def.pop_weight;
     $("[data-k=alpha]", el).value = c.alpha;
     $("[data-k=svd_weight]", el).value = c.svd_weight;
     $("[data-k=pop_weight]", el).value = c.pop_weight;
-    $("[data-k=genre]", el).value = "";
     label();
     fire();
   };
@@ -531,9 +523,9 @@ function makeControls(el, onChange) {
   return c;
 }
 
-const recQuery = (c, n = 24) => {
+const recQuery = (c, n = 24, genres = []) => {
   const p = new URLSearchParams({ n, alpha: c.alpha, svd_weight: c.svd_weight, pop_weight: c.pop_weight });
-  if (c.genre) p.set("genre", c.genre);
+  genres.forEach((g) => p.append("genre", g));
   return p;
 };
 
@@ -583,7 +575,7 @@ function mountRater(el, onChange) {
         books = await api(`/api/popular?n=18&offset=${offset}`);
       }
       const mine = Object.values(state.myBooks).filter((b) => !books.some((x) => x.id === b.id));
-      if (offset === 0) books = [...mine, ...books];
+      if (offset === 0 && mine.length <= 12) books = [...mine, ...books];
     }
     remember(books);
     grid.innerHTML = "";
@@ -598,19 +590,19 @@ function mountRater(el, onChange) {
 }
 
 /* ---------------- onboarding ---------------- */
-async function loadMyRecs(grid, controls, n = 24) {
+async function loadMyRecs(grid, controls, n = 24, genres = []) {
   skeleton(grid, Math.min(n, 12));
   const t0 = performance.now();
-  const recs = await api(`/api/me/recommendations?${recQuery(controls, n)}`);
+  const recs = await api(`/api/me/recommendations?${recQuery(controls, n, genres)}`);
   const personal = state.me.is_demo || Object.keys(state.myRatings).length > 0;
-  renderGrid(grid, recs, { match: personal, reason: true, predicted: personal, empty: "No books match this filter." });
+  renderGrid(grid, recs, { match: personal, reason: true, predicted: personal, genres: genres.length ? genres : undefined, empty: "No books match this filter." });
   return Math.round(performance.now() - t0);
 }
 
 function renderOnboarding() {
   const me = state.me;
   $("#ob-title").textContent = `Welcome, ${me.name}! Tell us what you like`;
-  const defaults = { ...state.meta.hybrid_default, genre: "" };
+  const defaults = { ...state.meta.hybrid_default };
   const refresh = debounce(async () => {
     await loadMyRecs($("#ob-grid"), defaults, 12);
     const n = Object.keys(state.myRatings).length;
@@ -654,10 +646,13 @@ async function renderHome() {
   renderProfile(me);
   $("#home-empty").hidden = me.is_demo || me.profile.n_ratings > 0;
   const load = async () => {
-    const ms = await loadMyRecs(grid, state.homeControls);
+    const gs = state.homeGenres;
+    $("#home-recs-title").textContent = gs.length ? `Recommended for you in ${gs.join(" + ")}` : "Recommended for you";
+    const ms = await loadMyRecs(grid, state.homeControls, 24, gs);
     $("#home-note").textContent = `scored all ${state.meta.dataset.n_books.toLocaleString()} books in ${ms} ms`;
   };
   state.homeControls = makeControls($("#home-controls"), load);
+  genreChips($("#home-genres"), state.homeGenres, (gs) => { state.homeGenres = gs; load(); }, { multi: true });
   load();
 }
 
@@ -674,14 +669,12 @@ async function renderLibrary() {
   const me = await loadMe();
   if (!me) return route();
   $("#lib-lede").textContent = me.is_demo
-    ? `These are ${me.name}'s real ratings from the Goodreads dataset. Demo accounts are read-only: sign up to rate books yourself.`
+    ? `${me.name}'s ratings from the Goodreads dataset, plus any you add here. Click a book to change its rating.`
     : "Everything you have rated. Click a book to change your rating.";
   renderRated();
   $("#lib-toread-wrap").hidden = !me.profile.to_read.length;
   $("#lib-toread").innerHTML = me.profile.to_read.map((b) => bookCard(b)).join("");
   remember(me.profile.to_read);
-  $("#lib-rate-wrap").hidden = me.is_demo;
-  if (me.is_demo) return;
   const rater = mountRater($("#lib-rater"), renderRated);
   genreChips($("#lib-genres"), me.genres, async (gs) => { await setMyGenres(gs); rater.reload(); }, { multi: true, all: false });
 }

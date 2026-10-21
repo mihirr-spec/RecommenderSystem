@@ -11,6 +11,7 @@ from .config import ARTIFACTS_DIR, GENRES, RELEVANCE_THRESHOLD
 
 TO_READ_WEIGHT = 1.0  # a book on the to-read shelf counts like a 3.5-star rating
 NEW_USER_CONFIDENCE = 3  # ratings needed before the SVD rating model gets half its weight
+RECENT_WEIGHT = 3.0  # ratings a dataset reader adds in the app count 3x: they show their current taste
 
 
 class Recommender:
@@ -75,9 +76,16 @@ class Recommender:
         lo, hi = np.searchsorted(sorted_users, [uid, uid + 1])
         return lo, hi
 
-    def user_ratings(self, uid):
+    def user_ratings(self, uid, extra=None):
+        """A dataset reader's ratings. `extra` ({book_id: stars}) adds ratings
+        they made in the app, replacing their dataset rating for the same book."""
         lo, hi = self._slice(self._r_users, uid)
-        return self.ratings.iloc[lo:hi]
+        r = self.ratings.iloc[lo:hi]
+        if extra:
+            new = pd.DataFrame({"user_id": uid, "book_id": list(extra), "rating": list(extra.values())})
+            r = pd.concat([new, r[~r["book_id"].isin(list(extra))]], ignore_index=True)
+            r = r.sort_values("rating", ascending=False, kind="stable")
+        return r
 
     def user_to_read(self, uid):
         lo, hi = self._slice(self._t_users, uid)
@@ -103,6 +111,20 @@ class Recommender:
             w["pop_weight"] = pop_weight
         return w
 
+    def _genre_list(self, genre):
+        if not genre:
+            return []
+        return [g for g in ([genre] if isinstance(genre, str) else genre) if g in self.genre_mask]
+
+    def _only_genres(self, score, genre, bonus):
+        """Keep books in at least one of the requested genres; books in more of
+        them get `bonus` per extra genre, so the best mixes come first."""
+        gs = self._genre_list(genre)
+        if not gs:
+            return score
+        matched = sum(self.genre_mask[g].astype(int) for g in gs)
+        return np.where(matched > 0, score + bonus * (matched - 1), -np.inf)
+
     def _recommend(self, row, svd_s, weights, exclude, n, genre=None, boost_genres=(), liked=()):
         knn_s = scoring.knn_scores(self.knn, row)
         cb_s = scoring.content_scores(self.content, scoring.content_profiles(self.content, row))
@@ -114,8 +136,7 @@ class Recommender:
         cb = np.clip(cb_s[0], 0, None)
         cb[np.asarray(exclude, dtype=int)] = 0
         taste = cb / (cb.max() + 1e-9)
-        if genre:
-            hybrid = np.where(self.genre_mask[genre], hybrid, -np.inf)
+        hybrid = self._only_genres(hybrid, genre, bonus=1.0)
         recs = scoring.top_n(hybrid, n, exclude)
         reasons = self._explain(recs, np.asarray(liked, dtype=int), row)
         return [
@@ -220,8 +241,8 @@ class Recommender:
         pick = np.random.default_rng(7).choice(pool, n, replace=False)
         return [self.user_summary(int(u)) for u in sorted(pick)]
 
-    def user_summary(self, uid):
-        r = self.user_ratings(uid)
+    def user_summary(self, uid, extra=None):
+        r = self.user_ratings(uid, extra)
         liked = r[r["rating"] >= RELEVANCE_THRESHOLD]["book_id"].to_numpy() - 1
         genre_counts = pd.Series(
             [g for i in liked for g in self.catalog.iloc[int(i)]["genres"]], dtype=object
@@ -234,20 +255,23 @@ class Recommender:
             "top_genres": list(genre_counts.index[:3]),
         }
 
-    def _user_row(self, uid):
-        r = self.user_ratings(uid)
+    def _user_row(self, uid, extra=None):
+        r = self.user_ratings(uid, extra)
         t = self.user_to_read(uid)
         idx = np.concatenate([r["book_id"].to_numpy() - 1, t["book_id"].to_numpy() - 1])
-        w = np.concatenate([scoring.rating_weights(r["rating"]), np.full(len(t), TO_READ_WEIGHT)])
+        rw = np.asarray(scoring.rating_weights(r["rating"]), dtype=float)
+        if extra:
+            rw = np.where(r["book_id"].isin(list(extra)).to_numpy(), RECENT_WEIGHT * rw, rw)
+        w = np.concatenate([rw, np.full(len(t), TO_READ_WEIGHT)])
         # A book can be both rated and on the to-read shelf: keep the rating.
         idx, first = np.unique(idx, return_index=True)
         return r, t, self._row(idx, w[first])
 
-    def user_profile(self, uid):
-        r, t, row = self._user_row(uid)
+    def user_profile(self, uid, extra=None):
+        r, t, row = self._user_row(uid, extra)
         profile = scoring.content_profiles(self.content, row)
         return {
-            **self.user_summary(uid),
+            **self.user_summary(uid, extra),
             "rated": [self.book(b - 1, user_rating=float(s)) for b, s in zip(r["book_id"], r["rating"])],
             "to_read": [self.book(b - 1) for b in t["book_id"].to_numpy()[:24]],
             "taste_tags": self.top_profile_tags(profile, 12),
@@ -284,8 +308,11 @@ class Recommender:
         the same author so one series can't fill the list."""
         base = self.bayes + 0.15 * self.pop
         spread = 1.5 * base.std()
-        if genre:
-            base = np.where(self.genre_mask[genre], base, -np.inf)
+        only = self._genre_list(genre)
+        if only:
+            # Filtering by genre: one list, books with the most of those genres first.
+            base = self._only_genres(base, only, bonus=10 * spread)
+            genres = []
         lists = [(None, np.argsort(-base))]
         if genres:
             lists = [
@@ -299,7 +326,7 @@ class Recommender:
                 while pos[i] < self.n:
                     r = int(order[pos[i]])
                     pos[i] += 1
-                    if g and not self.genre_mask[g][r] or genre and not self.genre_mask[genre][r]:
+                    if not np.isfinite(base[r]) or g and not self.genre_mask[g][r]:
                         pos[i] = self.n  # this genre's list is used up
                         break
                     author = self.catalog.iloc[r]["authors"].split(",")[0]
@@ -311,17 +338,22 @@ class Recommender:
                     break
                 if len(picks) >= n:
                     break
-        return [
-            self.book(r, match=None, reason={
-                "type": "genre", "text": f"Top rated in {g}" if g else "A reader favourite",
-            })
-            for r, g in picks
-        ]
+        def reason(r, g):
+            if only:
+                g = " + ".join(x for x in only if self.genre_mask[x][r])
+            return {"type": "genre", "text": f"Top rated in {g}" if g else "A reader favourite"}
 
-    def recommend_user(self, uid, n=24, alpha=None, pop_weight=None, genre=None, svd_weight=None):
-        r, t, row = self._user_row(uid)
-        u = self.cf["user_row"][uid]
-        svd_s = scoring.cf_scores(self.cf, self.cf["bu"][u], self.cf["pu"][u])
+        return [self.book(r, match=None, reason=reason(r, g)) for r, g in picks]
+
+    def recommend_user(self, uid, n=24, alpha=None, pop_weight=None, genre=None, svd_weight=None, extra=None):
+        r, t, row = self._user_row(uid, extra)
+        if extra:
+            # New ratings since training: re-fit this reader's SVD vector from all their ratings.
+            bu, pu = scoring.fold_in(self.cf, r["book_id"].to_numpy() - 1, r["rating"].to_numpy(dtype=float), self.fold_reg)
+        else:
+            u = self.cf["user_row"][uid]
+            bu, pu = self.cf["bu"][u], self.cf["pu"][u]
+        svd_s = scoring.cf_scores(self.cf, bu, pu)
         exclude = np.union1d(r["book_id"].to_numpy() - 1, t["book_id"].to_numpy() - 1)
         liked = r["book_id"].to_numpy()[r["rating"].to_numpy() >= RELEVANCE_THRESHOLD] - 1
         return self._recommend(

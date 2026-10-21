@@ -196,7 +196,7 @@ def log_out(authorization: Optional[str] = Header(None)):
 @app.get("/api/me")
 def me(user=Depends(current_user)):
     if user["is_demo"]:
-        profile = rec.user_profile(user["dataset_user_id"])
+        profile = rec.user_profile(user["dataset_user_id"], extra=accounts.get_ratings(user["id"]))
     else:
         profile = rec.new_profile(accounts.get_ratings(user["id"]))
     return {**user, "profile": profile}
@@ -213,8 +213,6 @@ def set_genres(body: Genres, user=Depends(current_user)):
 @app.put("/api/me/ratings/{book_id}")
 def set_rating(book_id: int, body: Rating, user=Depends(current_user)):
     check_book(book_id)
-    if user["is_demo"]:
-        raise HTTPException(403, "Demo accounts use their ratings from the dataset. Sign up to rate books.")
     if body.rating and body.rating < 1:
         raise HTTPException(400, "Ratings must be between 1 and 5")
     accounts.set_rating(user["id"], book_id, body.rating)
@@ -227,12 +225,15 @@ def my_recommendations(
     alpha: Optional[float] = Alpha,
     svd_weight: Optional[float] = SvdWeight,
     pop_weight: Optional[float] = PopWeight,
-    genre: Optional[str] = None,
+    genre: List[str] = Query([], description="only books in these genres; books with all of them first"),
     user=Depends(current_user),
 ):
-    check_genre(genre)
+    for g in genre:
+        check_genre(g)
     if user["is_demo"]:
-        return rec.recommend_user(user["dataset_user_id"], n, alpha, pop_weight, genre, svd_weight)
+        return rec.recommend_user(
+            user["dataset_user_id"], n, alpha, pop_weight, genre, svd_weight, extra=accounts.get_ratings(user["id"])
+        )
     return rec.recommend_new(
         accounts.get_ratings(user["id"]), user["genres"], n, alpha, pop_weight, genre, svd_weight
     )

@@ -9,11 +9,11 @@ A book recommender system built on the [Goodbooks-10k](https://github.com/zygmun
 ## Features
 - **Accounts:** sign up, log in, and your ratings are saved
 - **Onboarding:** a new user picks genres and rates a few books, and recommendations appear instantly
-- **Demo accounts:** one-click log-in as one of 4 real readers from the dataset
+- **Demo accounts:** one-click log-in as one of 4 real readers from the dataset; they can rate books too
 - **Personalised recommendations**, each with a reason ("Because you liked *The Hobbit*")
+- **"What are you in the mood for?":** pick one or more genres and get the books from them you'd like most
 - **My Books:** your rating history, and more books to rate
-- **Discover** popular and top-rated books by genre, and **similar books** for any title
-- **Model Insights** page showing how the model was evaluated
+- **Discover:** popular and top-rated books, mixing several genres at once, and **similar books** for any title
 
 ## How it works
 The app combines three models into one hybrid score:

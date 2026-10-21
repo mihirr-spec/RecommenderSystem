@@ -446,3 +446,7 @@ tr.hl { background: color-mix(in srgb, var(--good) 7%, transparent); }
 .book-genres { font-size: 12px; color: var(--muted); line-height: 1.35; }
 .book-genres b { color: var(--accent); font-weight: 600; }
 .chips-note { margin: -6px 0 12px; }
+.controls { grid-template-columns: repeat(3, 1fr); }
+.mood { margin-top: 20px; padding: 18px 22px 6px; }
+.mood-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+@media (max-width: 960px) { .controls { grid-template-columns: 1fr; } }
